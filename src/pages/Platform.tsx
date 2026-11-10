@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
+import { useAuth } from '../lib/auth'
 import { approvals, industries, months, orgGrowth, orgs, planTiers, revenue, inr, type Org } from '../data'
 import { AreaChart, Avatar, Badge, BarChart, Button, Card, CardHeader, Confirm, DataTable, Donut, Dropdown, EmptyState, ErrorState, Field, Logo, Modal, PageHeader, SearchBox, Select, Stat, Status, Tabs, Textarea, Toggle, cx, useFakeLoad, useToast, Skel } from '../ui'
 
@@ -21,6 +22,7 @@ const items = [
 
 export function PlatformLayout({ path, children }: { path: string; children: ReactNode }) {
   const [drawer, setDrawer] = useState(false)
+  const auth = useAuth()
   const nav = (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5 scrollbar-none">
       {items.map(([l, to, Ic]) => {
@@ -55,7 +57,7 @@ export function PlatformLayout({ path, children }: { path: string; children: Rea
         <Badge tone="violet">Platform owner</Badge>
         <div className="flex-1" />
         <button className="relative size-10 grid place-items-center rounded-lg hover:bg-ng-canvas text-ng-mute cursor-pointer" aria-label="Notifications"><I.Bell size={19} /><span className="absolute top-2 right-2.5 size-2 rounded-full bg-ng-indigo" /></button>
-        <Dropdown label="Account menu" trigger={<span className="flex items-center gap-2"><Avatar name="Ishaan Verma" /><span className="hidden sm:block text-left text-sm leading-tight"><b className="block">Ishaan Verma</b><span className="text-xs text-ng-mute">Super Admin</span></span></span>} items={[{ label: 'My profile', icon: <I.User size={16} /> }, { label: 'Security & MFA', icon: <I.ShieldCheck size={16} /> }, { divider: true, label: '' }, { label: 'Open an organisation workspace', icon: <I.ExternalLink size={16} />, onClick: () => go('/app/education/overview') }, { label: 'Log out', icon: <I.LogOut size={16} />, onClick: () => go('/login'), danger: true }]} />
+        <Dropdown label="Account menu" trigger={<span className="flex items-center gap-2"><Avatar name="Ishaan Verma" /><span className="hidden sm:block text-left text-sm leading-tight"><b className="block">Ishaan Verma</b><span className="text-xs text-ng-mute">Super Admin</span></span></span>} items={[{ label: 'My profile', icon: <I.User size={16} /> }, { label: 'Security & MFA', icon: <I.ShieldCheck size={16} /> }, { divider: true, label: '' }, { label: 'Open an organisation workspace', icon: <I.ExternalLink size={16} />, onClick: () => go('/app/education/overview') }, { label: 'Log out', icon: <I.LogOut size={16} />, onClick: async () => { await auth.signOut(); go('/login') }, danger: true }]} />
       </header>
       <main key={path} className="px-4 md:px-8 py-6 md:py-8 max-w-[1400px] animate-fade">{children}</main>
     </div>

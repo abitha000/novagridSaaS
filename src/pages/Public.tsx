@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { useAuth } from '../lib/auth'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { Badge, Button, Field, Input, Logo, Reveal, Select, Textarea, cx, useToast } from '../ui'
@@ -335,10 +336,21 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [role, setRole] = useState<'org' | 'platform'>('org')
+  const auth = useAuth()
+  const live = auth.backend === 'live'
+  useEffect(() => {
+    if (live && auth.session && auth.ready) go(auth.homePath())
+  }, [live, auth.session, auth.ready, auth])
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     if (!String(f.get('pw'))) return setError('Enter your password to continue.')
+    if (live) {
+      setError('')
+      setLoading(true)
+      auth.signIn(String(f.get('em')).trim(), String(f.get('pw'))).catch((err: Error) => { setError(err.message); setLoading(false) })
+      return
+    }
     if (String(f.get('pw')) === 'wrong') return setError('Incorrect email or password. 2 attempts remaining.')
     setError(''); setLoading(true)
     setTimeout(() => go(role === 'platform' ? '/platform/overview' : '/app/education/overview'), 900)
@@ -352,10 +364,11 @@ export function LoginPage() {
       <div className="flex items-center justify-center p-6">
         <form onSubmit={submit} className="w-full max-w-sm animate-rise" noValidate>
           <h1 className="text-2xl font-bold">Log in</h1><p className="text-sm text-white/55 mt-1">Customers and recipients do not need an account.</p>
-          <div className="mt-6 grid grid-cols-2 rounded-lg bg-white/5 p-1 text-sm">{([['org', 'Organisation'], ['platform', 'Platform owner']] as const).map(([k, l]) => <button type="button" key={k} onClick={() => setRole(k)} className={cx('h-9 rounded-md font-medium cursor-pointer transition', role === k ? 'bg-white text-ng-ink' : 'text-white/60')}>{l}</button>)}</div>
+          {!live && <div className="mt-6 grid grid-cols-2 rounded-lg bg-white/5 p-1 text-sm">{([['org', 'Organisation'], ['platform', 'Platform owner']] as const).map(([k, l]) => <button type="button" key={k} onClick={() => setRole(k)} className={cx('h-9 rounded-md font-medium cursor-pointer transition', role === k ? 'bg-white text-ng-ink' : 'text-white/60')}>{l}</button>)}</div>}
+          {auth.backend === 'demo' && <p className="mt-4 rounded-lg bg-white/5 border border-white/10 p-3 text-xs text-white/60">Demo mode: {auth.backendNote || 'backend not connected'}. Sign-in uses sample data.</p>}
           <div className="mt-5 space-y-4 text-ng-ink [&_span]:text-white/80">
-            <Field label="Email"><Input name="em" type="email" defaultValue="owner@example.com" /></Field>
-            <Field label="Password" error={error}><Input name="pw" type="password" placeholder="Enter 'wrong' to preview the error state" invalid={!!error} /></Field>
+            <Field label="Email"><Input name="em" type="email" defaultValue={live ? '' : 'owner@example.com'} autoComplete="email" /></Field>
+            <Field label="Password" error={error}><Input name="pw" type="password" placeholder={live ? 'Your password' : "Enter 'wrong' to preview the error state"} autoComplete="current-password" invalid={!!error} /></Field>
           </div>
           <Button type="submit" size="lg" className="w-full mt-6" loading={loading}>Continue</Button>
           <p className="text-sm text-white/55 mt-5 text-center">New organisation? <Link to="/register" className="text-ng-sky font-medium">Create an account</Link></p>
@@ -371,13 +384,32 @@ export function RegisterPage() {
   const [busy, setBusy] = useState(false)
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [err, setErr] = useState('')
-  const [f, setF] = useState({ org: '', owner: '', email: '', phone: '', address: '', country: 'India', state: '', city: '', industry: 'Schools & Colleges', type: '', plan: 'Professional' })
+  const auth = useAuth()
+  const live = auth.backend === 'live'
+  const [sent, setSent] = useState(false)
+  const [f, setF] = useState({ password: '', org: '', owner: '', email: '', phone: '', address: '', country: 'India', state: '', city: '', industry: 'Schools & Colleges', type: '', plan: 'Professional' })
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value })
   const steps = ['Organisation', 'Owner', 'Industry & plan', 'Verify', 'Review']
+  const startLive = async () => {
+    setBusy(true)
+    try {
+      const input = { name: f.org, ownerName: f.owner, phone: f.phone, address: f.address, country: f.country, state: f.state, city: f.city, categoryKey: industries.find((i) => i.name === f.industry)?.key ?? 'education', orgType: f.type, planKey: planTiers.find((p) => p.name === f.plan)?.key ?? 'trial' }
+      const r = await auth.signUp(f.email.trim(), f.password, { token: crypto.randomUUID(), input })
+      setSent(r.needsEmailConfirmation)
+      setStep(3)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not create the account.')
+    } finally {
+      setBusy(false)
+    }
+  }
   const next = () => {
+    if (live && step === 1 && f.password.length < 8) return setErr('Choose a password of at least 8 characters.')
+    if (live && step === 2) { setErr(''); return void startLive() }
+    if (live && step === 3) return go('/login')
     if (step === 0 && (!f.org || !f.city)) return setErr('Organisation name and city are required.')
     if (step === 1 && (!/^\S+@\S+\.\S+$/.test(f.email) || f.phone.length < 8)) return setErr('Enter a valid email and phone number.')
-    if (step === 3 && otp.join('').length < 6) return setErr('Enter the 6-digit code we sent you.')
+    if (!live && step === 3 && otp.join('').length < 6) return setErr('Enter the 6-digit code we sent you.')
     setErr('')
     if (step === 3) { setBusy(true); return void setTimeout(() => { setBusy(false); setStep(4) }, 900) }
     setStep(step + 1)
@@ -390,9 +422,10 @@ export function RegisterPage() {
       <div className="sm:hidden text-xs text-white/50 mt-2">Step {step + 1} of 5 · {steps[step]}</div>
       <div key={step} className={cx('mt-8 rounded-2xl border border-white/10 bg-white/[0.04] p-6 animate-rise text-ng-ink', light)}>
         {step === 0 && <div className="grid sm:grid-cols-2 gap-4"><div className="sm:col-span-2"><Field label="Organisation name"><Input value={f.org} onChange={set('org')} placeholder="e.g. St. Xavier Institute" /></Field></div><div className="sm:col-span-2"><Field label="Address"><Input value={f.address} onChange={set('address')} /></Field></div><Field label="Country"><Select value={f.country} onChange={set('country')}><option>India</option></Select></Field><Field label="State"><Input value={f.state} onChange={set('state')} /></Field><Field label="City"><Input value={f.city} onChange={set('city')} /></Field></div>}
-        {step === 1 && <div className="grid gap-4"><Field label="Owner full name"><Input value={f.owner} onChange={set('owner')} /></Field><Field label="Work email"><Input type="email" value={f.email} onChange={set('email')} /></Field><Field label="Mobile number" hint="We send a verification code by SMS."><Input value={f.phone} onChange={set('phone')} placeholder="+91" /></Field></div>}
+        {step === 1 && <div className="grid gap-4"><Field label="Owner full name"><Input value={f.owner} onChange={set('owner')} /></Field><Field label="Work email"><Input type="email" value={f.email} onChange={set('email')} /></Field><Field label="Mobile number" hint={live ? 'International format, e.g. +919876543210. Phone verification needs an SMS provider and is not active yet.' : 'We send a verification code by SMS.'}><Input value={f.phone} onChange={set('phone')} placeholder="+91" /></Field>{live && <Field label="Password" hint="At least 8 characters."><Input type="password" autoComplete="new-password" value={f.password} onChange={set('password')} /></Field>}</div>}
         {step === 2 && <div className="grid gap-4"><Field label="Industry category" hint="One primary category. Our team approves it before business modules unlock."><Select value={f.industry} onChange={set('industry')}>{industries.map((i) => <option key={i.key}>{i.name}</option>)}</Select></Field><Field label="Organisation type"><Input value={f.type} onChange={set('type')} placeholder="e.g. Private college" /></Field><Field label="Preferred plan"><Select value={f.plan} onChange={set('plan')}>{planTiers.map((p) => <option key={p.key}>{p.name}</option>)}</Select></Field><p className="text-xs text-white/50">Running a gym and a hotel? Register each as its own organisation.</p></div>}
-        {step === 3 && <div><p className="text-sm text-white/70">Enter the code sent to <b>{f.email || 'your email'}</b> and <b>{f.phone || 'your phone'}</b>.</p><div className="mt-5 flex gap-2">{otp.map((d, i) => <input key={i} aria-label={`Digit ${i + 1}`} inputMode="numeric" maxLength={1} value={d} onChange={(e) => { const v = [...otp]; v[i] = e.target.value.replace(/\D/g, ''); setOtp(v); if (v[i]) (e.target.nextElementSibling as HTMLInputElement | null)?.focus() }} className="size-12 rounded-lg border border-white/20 bg-white text-center text-lg font-semibold text-ng-ink focus:ring-4 focus:ring-ng-indigo/30 outline-none" />)}</div><button className="mt-4 text-sm text-ng-sky cursor-pointer" onClick={() => setOtp('123456'.split(''))}>Fill demo code</button></div>}
+        {step === 3 && live && <div className="text-center py-2"><div className="mx-auto size-14 rounded-full bg-ng-indigo/20 text-ng-sky grid place-items-center"><I.MailCheck /></div><h2 className="mt-4 text-xl font-bold">{sent ? 'Check your email' : 'Account created'}</h2><p className="text-sm text-white/60 mt-2 max-w-sm mx-auto">{sent ? <>We sent a confirmation link to <b>{f.email}</b>. Open it to verify your email. Your organisation is then created and sent for category approval.</> : 'Your email is already confirmed. Sign in to continue.'}</p></div>}
+        {step === 3 && !live && <div><p className="text-sm text-white/70">Enter the code sent to <b>{f.email || 'your email'}</b> and <b>{f.phone || 'your phone'}</b>.</p><div className="mt-5 flex gap-2">{otp.map((d, i) => <input key={i} aria-label={`Digit ${i + 1}`} inputMode="numeric" maxLength={1} value={d} onChange={(e) => { const v = [...otp]; v[i] = e.target.value.replace(/\D/g, ''); setOtp(v); if (v[i]) (e.target.nextElementSibling as HTMLInputElement | null)?.focus() }} className="size-12 rounded-lg border border-white/20 bg-white text-center text-lg font-semibold text-ng-ink focus:ring-4 focus:ring-ng-indigo/30 outline-none" />)}</div><button className="mt-4 text-sm text-ng-sky cursor-pointer" onClick={() => setOtp('123456'.split(''))}>Fill demo code</button></div>}
         {step === 4 && (
           <div className="text-center py-4"><div className="mx-auto size-14 rounded-full bg-ng-indigo/20 text-ng-sky grid place-items-center animate-pulse-ring"><I.Hourglass /></div><h2 className="mt-4 text-xl font-bold">Awaiting category approval</h2><p className="text-white/60 mt-1 text-sm max-w-sm mx-auto">Business modules stay locked until the NOVAGRID team approves <b>{f.industry}</b> for {f.org || 'your organisation'}.</p>
             <ul className="mt-6 text-left max-w-xs mx-auto space-y-3 text-sm">{[['Registered', 1], ['Email & phone verified', 1], ['Category approval', 0], ['Plan & payment', -1], ['Dashboard activation', -1]].map(([l, s]) => <li key={l as string} className="flex items-center gap-3"><span className={cx('size-5 rounded-full grid place-items-center text-[10px]', s === 1 ? 'bg-ng-ok' : s === 0 ? 'bg-ng-indigo animate-pulse-ring' : 'bg-white/15')}>{s === 1 && <I.Check size={12} />}</span><span className={s === -1 ? 'text-white/40' : ''}>{l as string}</span></li>)}</ul>
@@ -401,7 +434,7 @@ export function RegisterPage() {
         )}
       </div>
       {err && <p className="mt-3 text-sm text-red-400 flex gap-2 items-center"><I.AlertCircle size={16} />{err}</p>}
-      {step < 4 && <div className="mt-6 flex justify-between"><Button variant="outline-dark" disabled={step === 0} onClick={() => { setErr(''); setStep(step - 1) }}>Back</Button><Button loading={busy} onClick={next}>{step === 3 ? 'Verify & submit' : 'Continue'}</Button></div>}
+      {step < 4 && <div className="mt-6 flex justify-between"><Button variant="outline-dark" disabled={step === 0} onClick={() => { setErr(''); setStep(step - 1) }}>Back</Button><Button loading={busy} onClick={next}>{live ? (step === 2 ? 'Create account' : step === 3 ? 'Go to login' : 'Continue') : step === 3 ? 'Verify & submit' : 'Continue'}</Button></div>}
     </div>
   )
 }

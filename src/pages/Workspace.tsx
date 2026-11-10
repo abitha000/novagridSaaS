@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
+import { useAuth, useLiveTenant } from '../lib/auth'
+import { LivePeople, LiveStaff } from './LiveData'
 import { busStops, inr, members, students } from '../data'
 import { AreaChart, Avatar, Badge, BarChart, Button, Card, CardHeader, Chips, DataTable, Donut, Dropdown, EmptyState, Field, Input, Logo, Modal, PageHeader, SearchBox, Select, Skel, Stat, Status, Tabs, Toggle, cx, useFakeLoad, useToast } from '../ui'
 
@@ -24,6 +26,7 @@ const peopleLabel: Record<Ind, string> = { gym: 'Members', education: 'Students 
 
 export function WorkspaceLayout({ ind, path, children }: { ind: Ind; path: string; children: ReactNode }) {
   const [drawer, setDrawer] = useState(false)
+  const auth = useAuth()
   const base = `/app/${ind}`
   const core: [string, string, I.LucideIcon][] = [['Overview', 'overview', I.LayoutGrid], ['People', 'people', I.Contact], ['Staff', 'staff', I.UserCog], ['Operations', 'operations', I.Workflow], ['Communications', 'comms', I.MessageSquareText], ['Payments', 'payments', I.CreditCard], ['Reports', 'reports', I.ChartColumn], ['Automation', 'automation', I.Zap], ['Settings', 'settings', I.Settings]]
   const t = tenant[ind]
@@ -65,7 +68,7 @@ export function WorkspaceLayout({ ind, path, children }: { ind: Ind; path: strin
         <div className="hidden lg:block w-72"><SearchBox value="" onChange={() => {}} placeholder="Search people, payments…" /></div>
         <Button size="sm" className="hidden sm:inline-flex" icon={<I.Send size={14} />} onClick={() => go(`${base}/comms`)}>New message</Button>
         <button className="relative size-10 grid place-items-center rounded-lg hover:bg-ng-canvas text-ng-mute cursor-pointer" aria-label="Notifications"><I.Bell size={19} /><span className="absolute top-2 right-2.5 size-2 rounded-full bg-ng-indigo" /></button>
-        <Dropdown label="Account menu" trigger={<Avatar name="Anita Rao" />} items={[{ label: 'Subscription & billing', icon: <I.CreditCard size={16} />, onClick: () => go(`${base}/billing`) }, { label: 'Organisation settings', icon: <I.Settings size={16} />, onClick: () => go(`${base}/settings`) }, { divider: true, label: '' }, { label: 'Log out', icon: <I.LogOut size={16} />, onClick: () => go('/login'), danger: true }]} />
+        <Dropdown label="Account menu" trigger={<Avatar name="Anita Rao" />} items={[{ label: 'Subscription & billing', icon: <I.CreditCard size={16} />, onClick: () => go(`${base}/billing`) }, { label: 'Organisation settings', icon: <I.Settings size={16} />, onClick: () => go(`${base}/settings`) }, { divider: true, label: '' }, { label: 'Log out', icon: <I.LogOut size={16} />, onClick: async () => { await auth.signOut(); go('/login') }, danger: true }]} />
       </header>
       <main key={path} className="px-4 md:px-8 py-6 md:py-8 pb-28 md:pb-10 max-w-[1320px] animate-fade">{children}</main>
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 grid grid-cols-5 bg-white/95 backdrop-blur border-t border-ng-line pb-[env(safe-area-inset-bottom)]" aria-label="Primary">
@@ -103,7 +106,7 @@ export function WorkspaceOverview({ ind }: { ind: Ind }) {
 
 /* ---------- People (contacts) ---------- */
 const mask = (n: number) => `+91 ••••• ••${(n * 37) % 90 + 10}`
-export function PeoplePage({ ind }: { ind: Ind }) {
+function DemoPeoplePage({ ind }: { ind: Ind }) {
   const toast = useToast()
   const [q, setQ] = useState('')
   const [seg, setSeg] = useState('All')
@@ -132,7 +135,7 @@ export function PeoplePage({ ind }: { ind: Ind }) {
 }
 
 /* ---------- Staff ---------- */
-export function StaffPage() {
+function DemoStaffPage() {
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [staff, setStaff] = useState([{ id: 1, n: 'Anita Rao', r: 'Organisation Owner', s: 'Active', l: 'Today' }, { id: 2, n: 'Vivek Nair', r: 'Organisation Admin', s: 'Active', l: 'Today' }, { id: 3, n: 'Pooja Shetty', r: 'Manager', s: 'Active', l: 'Yesterday' }, { id: 4, n: 'Arun Das', r: 'Accountant', s: 'Active', l: '3 days ago' }, { id: 5, n: 'Mina Thomas', r: 'Operator', s: 'Pending', l: 'Invited' }, { id: 6, n: 'Chetan Roy', r: 'Read-only Staff', s: 'Active', l: '1 week ago' }])
@@ -306,4 +309,14 @@ export function SettingsPage({ ind }: { ind: Ind }) {
       </div>
     </>
   )
+}
+
+/* Live (Supabase) when the schema is installed and an organisation is selected; sample data otherwise. */
+export function PeoplePage({ ind }: { ind: Ind }) {
+  const tenant = useLiveTenant()
+  return tenant ? <LivePeople key={tenant} tenantId={tenant} /> : <DemoPeoplePage ind={ind} />
+}
+export function StaffPage() {
+  const tenant = useLiveTenant()
+  return tenant ? <LiveStaff key={tenant} tenantId={tenant} /> : <DemoStaffPage />
 }
