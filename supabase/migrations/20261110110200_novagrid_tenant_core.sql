@@ -109,8 +109,8 @@ create table public.contacts (
   tenant_id uuid not null references public.organisations(id) on delete cascade,
   type text not null default 'person',                     -- member, student, parent, patient, guest ...
   full_name text not null check (char_length(full_name) between 2 and 160),
-  phone_e164 text check (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'),
-  email text check (email ~ '^\\S+@\\S+\\.\\S+$'),
+  phone_e164 text check (phone_e164 ~ '^[+][1-9][0-9]{7,14}$'),
+  email text check (email ~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'),
   attributes jsonb not null default '{}',
   status text not null default 'active' check (status in ('active','inactive')),
   created_by uuid references auth.users(id) default auth.uid(),
