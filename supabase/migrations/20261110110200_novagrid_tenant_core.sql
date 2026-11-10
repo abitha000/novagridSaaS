@@ -74,8 +74,8 @@ begin
       where tenant_id = old.tenant_id and role_id = owner_role and status = 'active' and id <> old.id;
     if remaining = 0 then raise exception 'an organisation must keep at least one active owner' using errcode = '23514'; end if;
   end if;
-  return coalesce(new, old);
-end $$;
+  if tg_op = 'DELETE' then return old; else return new; end if;
+end $;
 create trigger tenant_users_last_owner before update or delete on public.tenant_users for each row execute function private.protect_last_owner();
 
 create table public.contacts (
