@@ -1,29 +1,33 @@
 \set ON_ERROR_STOP on
--- Seed two independent organisations and users. The seed data is deliberately synthetic.
+-- Seed two independent organisations and users. Synthetic test identities only.
 insert into auth.users (id,email,email_confirmed_at) values
  ('10000000-0000-0000-0000-000000000001','a@example.test',now()),
  ('10000000-0000-0000-0000-000000000002','b@example.test',now());
+
 insert into public.organisations (id,name,industry_category_id,owner_name,owner_email,approval_status,lifecycle_status,created_by)
 select '20000000-0000-0000-0000-000000000001','Tenant A',id,'Owner A','a@example.test','approved','active','10000000-0000-0000-0000-000000000001'
 from public.industry_categories where key='gym';
 insert into public.organisations (id,name,industry_category_id,owner_name,owner_email,approval_status,lifecycle_status,created_by)
 select '20000000-0000-0000-0000-000000000002','Tenant B',id,'Owner B','b@example.test','approved','active','10000000-0000-0000-0000-000000000002'
 from public.industry_categories where key='education';
+
 insert into public.tenant_users (tenant_id,user_id,role_id,full_name,email)
 select o.id,u.id,r.id,'Owner','owner@example.test'
 from public.organisations o
 join auth.users u on u.id=o.created_by
 join public.roles r on r.tenant_id is null and r.key='owner';
+
 insert into public.subscriptions (organisation_id,plan_id,status,period_end)
 select o.id,p.id,'active',now()+interval '30 days'
 from public.organisations o cross join public.subscription_plans p
 where p.key='basic';
+
 insert into public.contacts (tenant_id,full_name)
 values
  ('20000000-0000-0000-0000-000000000001','Contact A'),
  ('20000000-0000-0000-0000-000000000002','Contact B');
 
--- Structural assertions.
+-- Structural assertions: final schema version, reference seeds, RLS + FORCE RLS.
 do $$
 declare v int; r record;
 begin
@@ -38,7 +42,76 @@ begin
   end loop;
 end $$;
 
--- Authenticated user A must see only tenant A contacts, even though both tenants exist.
+-- User A must see only tenant A's records and must not insert into tenant B.
 set role authenticated;
 set request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
-select count(*) as visible_contacts from public.contacts;
+do $$
+declare n int;
+begin
+  select count(*) into n from public.contacts;
+  if n <> 1 then raise exception 'tenant A should see exactly one contact, saw %', n; end if;
+  if exists (select 1 from public.contacts where tenant_id='20000000-0000-0000-0000-000000000002') then
+    raise exception 'tenant A can read tenant B contacts';
+  end if;
+  begin
+    insert into public.contacts (tenant_id,full_name)
+    values ('20000000-0000-0000-0000-000000000002','Cross tenant attack');
+    raise exception 'tenant A unexpectedly inserted a tenant B contact';
+  exception when insufficient_privilege then
+    null; -- expected RLS WITH CHECK rejection
+  end;
+end $$;
+reset role;
+
+-- Trigger-level invariants: tenant-owned roles cannot be moved and cannot be assigned across tenants.
+insert into public.roles (tenant_id,key,name,is_system)
+values ('20000000-0000-0000-0000-000000000001','custom_test','Tenant A custom',false);
+do $$
+declare v_role uuid;
+begin
+  select id into v_role from public.roles where tenant_id='20000000-0000-0000-0000-000000000001' and key='custom_test';
+  begin
+    update public.roles set tenant_id='20000000-0000-0000-0000-000000000002' where id=v_role;
+    raise exception 'role tenant reassignment unexpectedly succeeded';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.tenant_users (tenant_id,user_id,role_id,full_name,email)
+    values ('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002',v_role,'Wrong Role','b@example.test');
+    raise exception 'cross-tenant role assignment unexpectedly succeeded';
+  exception when check_violation then null;
+  end;
+end $$;
+
+-- Last active owner cannot be demoted or deleted.
+do $$
+declare v_owner uuid;
+begin
+  select id into v_owner from public.tenant_users
+    where tenant_id='20000000-0000-0000-0000-000000000001' and user_id='10000000-0000-0000-0000-000000000001';
+  begin
+    update public.tenant_users set status='disabled' where id=v_owner;
+    raise exception 'last owner disable unexpectedly succeeded';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from public.tenant_users where id=v_owner;
+    raise exception 'last owner delete unexpectedly succeeded';
+  exception when check_violation then null;
+  end;
+end $$;
+
+-- Category-scoped plan assignment and module checks are enforced by the entitlement resolver.
+do $$
+declare v_edu uuid; v_gym uuid;
+begin
+  select id into v_edu from public.industry_categories where key='education';
+  select id into v_gym from public.industry_categories where key='gym';
+  if v_edu = v_gym then raise exception 'industry category IDs unexpectedly collide'; end if;
+  if exists (
+    select 1 from public.module_catalogue m
+    where m.scope='industry' and m.industry_category_id=v_edu and m.key like 'gym.%'
+  ) then raise exception 'gym module incorrectly assigned to education'; end if;
+end $$;
+
+select 'NOVAGRID migration and security smoke tests passed' as result;
