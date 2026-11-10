@@ -29,7 +29,7 @@ for each row execute function private.prevent_role_tenant_reassignment();
 
 create table public.permissions (
   id uuid primary key default gen_random_uuid(),
-  key text not null unique check (key ~ '^[a-z_]+[.][a-z_]+
+  key text not null unique check (key ~ '^[a-z_]+[.][a-z_]+$'),
   module_key text not null,
   action text not null
 );
