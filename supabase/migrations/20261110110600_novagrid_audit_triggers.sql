@@ -14,8 +14,8 @@ begin
   t := case when tg_table_name = 'organisations' then (v->>'id')::uuid else (v->>'tenant_id')::uuid end;
   insert into public.audit_logs (tenant_id, actor_id, actor_type, action, entity, entity_id, before_data, after_data)
   values (t, auth.uid(), case when auth.uid() is null then 'system' else 'user' end, lower(tg_op), tg_table_name, v->>'id', b, a);
-  return coalesce(new, old);
-end $$;
+  if tg_op = 'DELETE' then return old; else return new; end if;
+end $;
 
 do $$
 declare t text;
