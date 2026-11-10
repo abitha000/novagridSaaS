@@ -180,6 +180,9 @@ begin
   join public.contacts ct on ct.id = c.id and ct.tenant_id = p_tenant
   left join public.communication_preferences cp on cp.tenant_id = p_tenant and cp.contact_id = c.id and cp.channel = p_channel;
 
+  -- Queue workers must still verify the parent notification is due; this timestamp is a second guard.
+  update public.notification_recipients set next_attempt_at = greatest(now(), coalesce(p_scheduled_at, now()))
+    where notification_id = v_id and status = 'queued';
   select count(*) into v_queued from public.notification_recipients where notification_id = v_id and status = 'queued';
   update public.notifications set recipient_count = v_queued where id = v_id;
   return v_id;
