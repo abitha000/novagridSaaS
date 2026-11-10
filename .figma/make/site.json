@@ -1,0 +1,10 @@
+{
+  "description": "A modular operations platform for organisations to manage staff, subscriptions, workflows, communications and industry-specific business operations in one secure workspace.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
