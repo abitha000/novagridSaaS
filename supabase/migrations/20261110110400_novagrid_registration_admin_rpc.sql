@@ -100,7 +100,7 @@ end $$;
 create or replace function public.record_consent(p_tenant uuid, p_contact uuid, p_channel text, p_status text, p_source text)
 returns void language plpgsql security definer set search_path = '' as $$
 begin
-  if not (private.has_permission(p_tenant, 'contacts.edit') and private.is_writable(p_tenant)) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if not (private.has_permission(p_tenant, 'contacts.edit') and private.has_module_access(p_tenant, 'core.contacts') and private.is_writable(p_tenant)) then raise exception 'not allowed' using errcode = '42501'; end if;
   if p_channel not in ('whatsapp','sms','email') or p_status not in ('opted_in','opted_out') or coalesce(trim(p_source), '') = '' then
     raise exception 'invalid consent record' using errcode = '22023'; end if;
   if not exists (select 1 from public.contacts where id = p_contact and tenant_id = p_tenant and deleted_at is null) then
