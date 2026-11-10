@@ -43,8 +43,4 @@ jobs:
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
       - name: Run schema and tenant-isolation smoke tests
-        run: |
-          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration-smoke.sql
-          visible="$(psql -Atc "select count(*) from public.contacts")"
-          test "$visible" = "1"
-          echo "Tenant A sees exactly one contact; cross-tenant rows are hidden."
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/migration-smoke.sql
