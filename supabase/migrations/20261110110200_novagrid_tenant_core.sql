@@ -44,7 +44,7 @@ create index on public.tenant_users (user_id);
 
 -- A staff membership may use a global system role or a role owned by that same tenant only.
 create or replace function private.enforce_tenant_role_scope() returns trigger
-language plpgsql set search_path = '' as $
+language plpgsql set search_path = '' as $$
 declare v_role_tenant uuid;
 begin
   select tenant_id into v_role_tenant from public.roles where id = new.role_id;
@@ -55,7 +55,7 @@ begin
     raise exception 'staff role belongs to a different organisation' using errcode = '23514';
   end if;
   return new;
-end $;
+end $$;
 create trigger tenant_users_role_scope
 before insert or update of tenant_id, role_id on public.tenant_users
 for each row execute function private.enforce_tenant_role_scope();
@@ -75,7 +75,7 @@ begin
     if remaining = 0 then raise exception 'an organisation must keep at least one active owner' using errcode = '23514'; end if;
   end if;
   if tg_op = 'DELETE' then return old; else return new; end if;
-end $;
+end $$;
 create trigger tenant_users_last_owner before update or delete on public.tenant_users for each row execute function private.protect_last_owner();
 
 create table public.contacts (
