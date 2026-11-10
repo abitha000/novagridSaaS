@@ -149,10 +149,6 @@ create table public.consent_events (
   foreign key (tenant_id, contact_id) references public.contacts (tenant_id, id) on delete cascade
 );
 create index on public.consent_events (tenant_id, contact_id, created_at desc);
-),
-  module_key text not null,
-  action text not null
-);
 
 create table public.role_permissions (
   role_id uuid not null references public.roles(id) on delete cascade,
