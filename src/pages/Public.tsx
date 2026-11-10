@@ -89,7 +89,7 @@ function HeroDashboard() {
           <div className="mt-2 text-sm">Delivered to <b>41 of 42</b> recipients</div>
           <div className="mt-2 h-1.5 rounded-full bg-white/10"><div className="h-full w-[97%] rounded-full bg-gradient-to-r from-ng-indigo to-ng-sky" /></div>
         </div>
-        <div className="absolute -right-3 -top-5 rounded-xl border border-white/15 bg-ng-navy-2/95 px-3.5 py-2.5 text-xs shadow-2xl [transform:translateZ(80px)] animate-rise" style={{ animationDelay: '1.3s' }}>
+        <div className="absolute -right-8 -top-8 z-30 rounded-xl border border-white/15 bg-ng-navy-2 px-3.5 py-2.5 text-xs shadow-2xl [transform:translateZ(120px)] animate-rise" style={{ animationDelay: '1.3s' }}>
           <span className="text-ng-sky font-semibold">+12.4%</span> <span className="text-white/60">renewals this month</span>
         </div>
       </div>
