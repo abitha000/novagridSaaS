@@ -32,7 +32,7 @@ do $$
 declare v int; r record;
 begin
   select public.novagrid_schema_version() into v;
-  if v <> 8 then raise exception 'schema version expected 8, got %', v; end if;
+  if v <> 9 then raise exception 'schema version expected 9, got %', v; end if;
   if (select count(*) from public.industry_categories) < 10 then raise exception 'industry seeds missing'; end if;
   if (select count(*) from public.roles where tenant_id is null) < 6 then raise exception 'system roles missing'; end if;
   for r in select tablename from pg_tables where schemaname='public' and tablename <> 'kv_store_5a875bd1' loop
