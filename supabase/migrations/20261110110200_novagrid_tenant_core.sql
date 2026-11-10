@@ -84,6 +84,9 @@ begin
   if tg_op = 'DELETE' then
     if not exists (select 1 from public.organisations where id = old.tenant_id) then return old; end if;
   end if;
+  -- Serialize owner removals/role changes per organisation to prevent concurrent transactions
+  -- from both observing another owner and leaving the organisation ownerless.
+  perform 1 from public.organisations where id = old.tenant_id for update;
   select id into owner_role from public.roles where tenant_id is null and key = 'owner';
   if old.role_id = owner_role and old.status = 'active' then
     if tg_op = 'DELETE' then
