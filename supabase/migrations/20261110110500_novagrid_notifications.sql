@@ -127,7 +127,7 @@ begin
     end if;
     return query select id from public.contacts where tenant_id = p_tenant and deleted_at is null and status = 'active';
   elsif p_audience->>'type' = 'contacts' then
-    if jsonb_typeof(p_audience->'contact_ids') <> 'array' then
+    if jsonb_typeof(p_audience->'contact_ids') is distinct from 'array' then
       raise exception 'contact_ids must be a JSON array' using errcode = '22023';
     end if;
     if jsonb_array_length(p_audience->'contact_ids') = 0 or jsonb_array_length(p_audience->'contact_ids') > 10000 then
@@ -149,7 +149,7 @@ begin
   if not private.has_permission(p_tenant, 'communications.send') then raise exception 'not allowed' using errcode = '42501'; end if;
   if not private.has_module_access(p_tenant, 'core.notify') then raise exception 'notification module is not enabled' using errcode = '42501'; end if;
   if not private.is_writable(p_tenant) then raise exception 'organisation is read-only or not active' using errcode = '42501'; end if;
-  if p_channel not in ('whatsapp','sms','email')
+  if p_channel is null or p_channel not in ('whatsapp','sms','email')
      or (p_fallback_channel is not null and p_fallback_channel not in ('whatsapp','sms','email'))
      or p_fallback_channel = p_channel
      or coalesce(trim(p_body), '') = ''
