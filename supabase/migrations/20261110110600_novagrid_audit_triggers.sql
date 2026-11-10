@@ -15,7 +15,7 @@ begin
   insert into public.audit_logs (tenant_id, actor_id, actor_type, action, entity, entity_id, before_data, after_data)
   values (t, auth.uid(), case when auth.uid() is null then 'system' else 'user' end, lower(tg_op), tg_table_name, v->>'id', b, a);
   if tg_op = 'DELETE' then return old; else return new; end if;
-end $;
+end $$;
 
 do $$
 declare t text;
