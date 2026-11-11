@@ -55,7 +55,7 @@ Use `--dry-run` only if supported by the installed CLI version. Check the curren
 
 ## Required verification
 
-- `public.novagrid_schema_version()` returns `10`.
+- `public.novagrid_schema_version()` returns `11`.
 - All NOVAGRID tables have RLS enabled and forced.
 - A user in tenant A cannot read, insert, update, or reference tenant B's records.
 - A tenant cannot assign a role created by another tenant.

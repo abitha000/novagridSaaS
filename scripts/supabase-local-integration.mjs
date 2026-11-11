@@ -117,4 +117,64 @@ console.log("PASS E2E: organisation remained pending until platform admin approv
 console.log("PASS E2E: category approval did not activate subscription");
 console.log("PASS E2E: platform admin separately assigned trial subscription");
 
+
+ // Staff role/permission integration. These users exist only in this disposable Supabase stack.
+ const staffOperator=await call("/auth/v1/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:"staff-operator@novagrid.test",password,email_confirm:true})});
+ const staffTarget=await call("/auth/v1/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:"staff-target@novagrid.test",password,email_confirm:true})});
+ const staffAdmin=await call("/auth/v1/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:"staff-admin@novagrid.test",password,email_confirm:true})});
+ const operatorId=staffOperator.user?.id||staffOperator.id;
+ const targetId=staffTarget.user?.id||staffTarget.id;
+ const adminStaffId=staffAdmin.user?.id||staffAdmin.id;
+ assert(operatorId&&targetId&&adminStaffId,"Staff integration users were not created");
+ const staffFixtures=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-v",`operator_id=${operatorId}`,"-v",`target_id=${targetId}`,"-v",`admin_id=${adminStaffId}`,"-f","supabase/tests/staff-rbac-fixtures.sql"],{encoding:"utf8"});
+ if(staffFixtures.status!==0)throw new Error(staffFixtures.stderr||"Staff RBAC fixtures failed");
+ assert(/^[0-9a-f-]{36}$/i.test(targetId),"Invalid generated staff target UUID");
+ const crossTenantSql=`insert into public.tenant_users(tenant_id,user_id,role_id,full_name,email,status) select '21000000-0000-0000-0000-000000000002', '${targetId}'::uuid, r.id, 'Cross Tenant', 'cross-tenant@novagrid.test', 'invited' from public.roles r where r.tenant_id='21000000-0000-0000-0000-000000000001' and r.key='tenant_custom';`;
+ const crossTenantRole=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-c",crossTenantSql],{encoding:"utf8"});
+ assert(crossTenantRole.status!==0&&String(crossTenantRole.stderr).includes("staff role belongs to a different organisation"),"Cross-tenant role assignment was not rejected by the database");
+
+ const operatorToken=await loginAs("staff-operator@novagrid.test");
+ const ownerCanManage=await rpc(ownerToken,"can_manage_staff",{p_tenant:orgId});
+ assert(ownerCanManage===true,"Organisation owner should be allowed to manage staff");
+ const operatorCanManage=await rpc(operatorToken,"can_manage_staff",{p_tenant:"21000000-0000-0000-0000-000000000001"});
+ assert(operatorCanManage===false,"Operator without staff.manage unexpectedly passed authorization");
+ const seatReservation=await rpc(ownerToken,"reserve_staff_invitation",{p_tenant:orgId,p_email:"seat-reservation@novagrid.test",p_role_key:"manager",p_full_name:"Seat Reservation"});
+ assert(typeof seatReservation==="string","Staff seat reservation RPC did not return an id");
+ await call("/rest/v1/rpc/release_staff_invitation",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({p_reservation:seatReservation})});
+ const targetQuery=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${targetId}&select=id,status`,{headers:{apikey:anon,Authorization:`Bearer ${tokenA}`}});
+ const targetMemberships=await targetQuery.json();
+ assert(targetQuery.ok&&targetMemberships.length===1,"Invited staff fixture was not created");
+ const targetMembershipId=targetMemberships[0].id;
+ const staffPatch=async(token,id,values)=>{
+   const response=await fetch(base+`/rest/v1/tenant_users?id=eq.${id}&select=id,status`,{method:"PATCH",headers:{apikey:anon,Authorization:`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(values)});
+   const raw=await response.text();let data;try{data=raw?JSON.parse(raw):null}catch{data=raw}
+   if(!response.ok)throw new Error("Staff update failed: "+raw.slice(0,300));
+   return data;
+ };
+ const expectOwnerPromotionDenied=async(token,id)=>{
+   const response=await fetch(base+`/rest/v1/tenant_users?id=eq.${id}&select=id,role_id`,{method:"PATCH",headers:{apikey:anon,Authorization:`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({role_id:ownerRoleRows[0].id})});
+   const raw=await response.text();let data;try{data=raw?JSON.parse(raw):null}catch{data=raw}
+   if(response.ok){assert(Array.isArray(data)&&data.length===0,"Non-owner unexpectedly changed its membership to owner");return;}
+   assert(response.status===403&&data?.message==="only an owner can change owner assignments","Owner-role promotion was rejected for an unexpected reason: "+raw.slice(0,300));
+ };
+ const operatorUpdate=await staffPatch(operatorToken,targetMembershipId,{status:"active"});
+ assert(Array.isArray(operatorUpdate)&&operatorUpdate.length===0,"Operator without staff.manage changed another staff member");
+ const operatorSelf=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${operatorId}&select=id`,{headers:{apikey:anon,Authorization:`Bearer ${operatorToken}`}});
+ const operatorRows=await operatorSelf.json();
+ assert(operatorSelf.ok&&operatorRows.length===1,"Operator could not read own membership");
+ const ownerRoleResponse=await fetch(base+"/rest/v1/roles?tenant_id=is.null&key=eq.owner&select=id",{headers:{apikey:anon,Authorization:`Bearer ${ownerToken}`}});
+ const ownerRoleRows=await ownerRoleResponse.json();
+ assert(ownerRoleResponse.ok&&ownerRoleRows.length===1,"System owner role not available");
+ await expectOwnerPromotionDenied(operatorToken,operatorRows[0].id);
+ const staffAdminToken=await loginAs("staff-admin@novagrid.test");
+ const adminSelf=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${adminStaffId}&select=id`,{headers:{apikey:anon,Authorization:`Bearer ${staffAdminToken}`}});
+ const adminRows=await adminSelf.json();
+ assert(adminSelf.ok&&adminRows.length===1,"Admin staff membership was not visible");
+ await expectOwnerPromotionDenied(staffAdminToken,adminRows[0].id);
+ const ownerUpdate=await staffPatch(tokenA,targetMembershipId,{status:"active"});
+ assert(Array.isArray(ownerUpdate)&&ownerUpdate.length===1&&ownerUpdate[0].status==="active","Owner could not activate invited staff");
+ console.log("PASS Staff RBAC: operator cannot manage staff; admin cannot promote itself to owner");
+ console.log("PASS Staff RBAC: organisation owner can activate invited staff");
+ console.log("PASS Staff RBAC: database rejects a role owned by another tenant");
+
 console.log("PASS cleanup: synthetic data is confined to the disposable stack; workflow teardown removes it");
