@@ -7,6 +7,8 @@ import { useLiveTenant } from '../lib/auth'
 import { createTemplate, listNotifications, listRecipients, listTemplates } from '../lib/api/notifications'
 import type { NotificationRow, RecipientRow, Template } from '../lib/api/types'
 import { errorMessage } from '../lib/api/errors'
+import { listAllContacts, recordConsent } from '../lib/api/contacts'
+import type { Contact, Channel as ApiChannel } from '../lib/api/types'
 
 type Channel = 'WhatsApp' | 'SMS' | 'Email'
 const templates = [
@@ -227,7 +229,7 @@ function LiveComms({ tenantId }: { tenantId: string }) {
 
   return <>
     <PageHeader title="Communications" sub="Live tenant-scoped campaign history and message templates. Dispatch is not enabled in this screen." actions={<Button variant="secondary" icon={<I.RefreshCw size={15}/>} onClick={() => void load()}>Refresh</Button>} />
-    <Tabs value={tab} onChange={setTab} tabs={[{ id: 'history', label: 'Campaign history', count: notifications?.length ?? 0 }, { id: 'templates', label: 'Templates', count: templatesLive?.length ?? 0 }, { id: 'failed', label: 'Failed recipients', count: failed?.length ?? 0 }]} />
+    <Tabs value={tab} onChange={setTab} tabs={[{ id: 'history', label: 'Campaign history', count: notifications?.length ?? 0 }, { id: 'templates', label: 'Templates', count: templatesLive?.length ?? 0 }, { id: 'failed', label: 'Failed recipients', count: failed?.length ?? 0 }, { id: 'prefs', label: 'Recipient preferences' }]} />
     {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm p-4">{error}</div>}
     {tab === 'history' && <div className="mt-5 space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -249,6 +251,7 @@ function LiveComms({ tenantId }: { tenantId: string }) {
         {templatesLive?.length === 0 && <Card className="md:col-span-2 xl:col-span-3"><EmptyState title="No templates yet" body="Create a draft template to begin your organisation's template library."/></Card>}
       </div>
     </div>}
+    {tab === 'prefs' && <div className="mt-5"><LiveRecipientPreferences tenantId={tenantId}/></div>}
     {tab === 'failed' && <div className="mt-5"><Card><DataTable loading={failed === null} rows={failed ?? []} empty={<EmptyState title="No failed recipients" body="There are no failed recipients in the latest 50 campaign records."/>} cols={[
       {key:'person',header:'Recipient',mobile:'title',render:r=><span className="font-medium">{r.contact?.full_name ?? 'Contact'}</span>},
       {key:'channel',header:'Channel',render:r=>r.channel.toUpperCase()},
@@ -278,4 +281,58 @@ function LiveComms({ tenantId }: { tenantId: string }) {
       </div>}
     </Modal>
   </>
+}
+
+
+/* ---------------- Live consent preferences ---------------- */
+function LiveRecipientPreferences({ tenantId }: { tenantId: string }) {
+  const [contacts, setContacts] = useState<Contact[] | null>(null)
+  const [query, setQuery] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const toast = useToast()
+
+  const load = useCallback(async () => {
+    setError('')
+    try { setContacts(await listAllContacts(tenantId)) }
+    catch (e) { setError(errorMessage(e)); setContacts([]) }
+  }, [tenantId])
+  useEffect(() => { void load() }, [load])
+
+  const filtered = (contacts ?? []).filter(c => [c.full_name, c.email ?? '', c.phone_e164 ?? ''].some(v => v.toLowerCase().includes(query.toLowerCase())))
+  const consent = (contact: Contact, channel: ApiChannel) => contact.communication_preferences?.find(p => p.channel === channel)?.consent_status ?? 'unknown'
+  const change = async (contact: Contact, channel: ApiChannel, enabled: boolean) => {
+    const key = contact.id + ':' + channel
+    setBusy(key)
+    try {
+      await recordConsent(tenantId, contact.id, channel, enabled ? 'opted_in' : 'opted_out', 'Recorded by workspace user')
+      toast(enabled ? 'Consent recorded' : 'Opt-out recorded')
+      await load()
+    } catch (e) { toast(errorMessage(e), 'err') }
+    finally { setBusy(null) }
+  }
+
+  return <Card>
+    <div className="p-4 border-b border-ng-line flex flex-col sm:flex-row gap-3 justify-between sm:items-center">
+      <div><b className="text-sm">Communication consent</b><p className="text-xs text-ng-mute mt-1">Only explicit opt-in is treated as permission to message. Unknown consent remains off.</p></div>
+      <SearchBox value={query} onChange={setQuery} placeholder="Search name, email or phone" className="sm:w-72"/>
+    </div>
+    {error && <div className="p-4 text-sm text-red-700">{error} <Button size="sm" variant="secondary" onClick={() => void load()}>Retry</Button></div>}
+    {contacts === null ? <div className="p-6 text-sm text-ng-mute">Loading tenant contacts…</div> : filtered.length === 0 ? <EmptyState title="No contacts found" body={query ? "Try a different search." : "Add contacts before managing communication consent."}/> : <div className="divide-y divide-ng-line">
+      {filtered.map(contact => <div key={contact.id} className="p-4 flex flex-col xl:flex-row xl:items-center gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0"><Avatar name={contact.full_name}/><div className="min-w-0"><div className="font-medium truncate">{contact.full_name}</div><div className="text-xs text-ng-mute truncate">{contact.email || contact.phone_e164 || contact.type}</div></div></div>
+        <div className="grid grid-cols-3 gap-3 sm:gap-6">
+          {(['whatsapp','sms','email'] as ApiChannel[]).map(channel => {
+            const status = consent(contact, channel)
+            const key = contact.id + ':' + channel
+            return <div key={channel} className="min-w-[82px]">
+              <div className="text-xs text-ng-mute mb-1 capitalize">{channel}</div>
+              <div className="flex items-center gap-2"><Toggle on={status === 'opted_in'} disabled={busy === key} label={channel + ' consent for ' + contact.full_name} onChange={value => void change(contact, channel, value)}/><span className="text-[11px] text-ng-mute">{status === 'opted_in' ? 'Opted in' : status === 'opted_out' ? 'Opted out' : 'Unknown'}</span></div>
+            </div>
+          })}
+        </div>
+      </div>)}
+    </div>}
+    <div className="px-4 py-3 border-t border-ng-line text-xs text-ng-mute">{filtered.length.toLocaleString('en-IN')} of {(contacts ?? []).length.toLocaleString('en-IN')} contacts · consent changes are written through the audited record_consent function.</div>
+  </Card>
 }
