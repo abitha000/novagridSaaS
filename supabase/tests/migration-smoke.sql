@@ -346,3 +346,32 @@ begin
    raise exception 'WhatsApp access granted without channel entitlement'; end if;
 end
 $pr21_channel$;
+
+-- PR #22: audit payloads must use a positive allowlist, not a denylist.
+do $audit_allowlist$
+declare v jsonb;
+begin
+  v:=private.audit_safe_row('{
+    "id":"20000000-0000-0000-0000-000000000001",
+    "tenant_id":"20000000-0000-0000-0000-000000000001",
+    "status":"active",
+    "name":"Confidential organisation name",
+    "owner_name":"Confidential person",
+    "owner_email":"private@example.test",
+    "owner_phone":"+919999999999",
+    "address":"Private street address",
+    "body":"Private message body",
+    "raw":{"secret":"provider payload"},
+    "payload":{"token":"sensitive"},
+    "attributes":{"medical":"sensitive"},
+    "new_future_column":"must not be logged"
+  }'::jsonb);
+  if v->>'status'<>'active' then raise exception 'audit allowlist lost safe status'; end if;
+  if v ?| array['name','owner_name','owner_email','owner_phone','address','body','raw','payload','attributes','new_future_column'] then
+    raise exception 'audit allowlist retained sensitive or unapproved fields: %',v;
+  end if;
+  if (select count(*) from jsonb_object_keys(v))<>3 then
+    raise exception 'audit allowlist unexpected output: %',v;
+  end if;
+end
+$audit_allowlist$;
