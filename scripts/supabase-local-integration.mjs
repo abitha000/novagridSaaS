@@ -63,4 +63,62 @@ console.log("PASS Storage API: tenant A can upload its own file and cannot uploa
 // preserve audit history and its tenant FK prevents unsafe organisation deletion.
 // The entire disposable Supabase stack is stopped by the workflow's always() step,
 // which destroys the test database and all synthetic Auth users together.
+
+// End-to-end owner registration -> platform approval -> separate trial activation.
+const ownerEmail="registration-owner@novagrid.test";
+const adminEmail="platform-admin@novagrid.test";
+const ownerAuth=await call("/auth/v1/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:ownerEmail,password,email_confirm:true})});
+const adminAuth=await call("/auth/v1/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:adminEmail,password,email_confirm:true})});
+const ownerId=ownerAuth.user?.id||ownerAuth.id;
+const adminId=adminAuth.user?.id||adminAuth.id;
+assert(ownerId&&adminId,"Registration owner/platform admin Auth users were not created");
+const seedAdmin=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-v",`admin_id=${adminId}`,"-c",`
+ insert into public.platform_users(user_id,role,status)
+ values (:'admin_id'::uuid,'super_admin','active')
+ on conflict (user_id) do update set role='super_admin',status='active';
+`],{encoding:"utf8"});
+if(seedAdmin.status!==0) throw new Error(seedAdmin.stderr||"platform admin fixture seed failed");
+async function loginAs(email){
+ const response=await fetch(base+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:anon,"Content-Type":"application/json"},body:JSON.stringify({email,password})});
+ const result=await response.json();
+ if(!response.ok||!result.access_token)throw new Error("E2E login failed: "+JSON.stringify(result).slice(0,250));
+ return result.access_token;
+}
+async function rpc(token,name,args){
+ const response=await fetch(base+"/rest/v1/rpc/"+name,{method:"POST",headers:{apikey:anon,Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify(args)});
+ const raw=await response.text(); let result; try{result=raw?JSON.parse(raw):null}catch{result=raw}
+ if(!response.ok)throw new Error(name+" RPC failed ("+response.status+"): "+raw.slice(0,500));
+ return result;
+}
+const ownerToken=await loginAs(ownerEmail);
+const adminToken=await loginAs(adminEmail);
+const registrationToken=crypto.randomUUID();
+const registrationArgs={
+ p_registration_token:registrationToken,p_name:"E2E Registration Gym",p_owner_name:"Integration Owner",
+ p_phone:"+919876543210",p_address:"Test Address",p_country:"India",p_state:"Tamil Nadu",
+ p_city:"Hosur",p_category_key:"gym",p_org_type:"fitness",p_plan_key:"trial"
+};
+const orgId=await rpc(ownerToken,"register_organisation",registrationArgs);
+assert(typeof orgId==="string","Registration RPC did not return organisation UUID");
+const retryId=await rpc(ownerToken,"register_organisation",registrationArgs);
+assert(retryId===orgId,"Registration RPC retry was not idempotent");
+const pending=await fetch(base+`/rest/v1/organisations?id=eq.${orgId}&select=approval_status,lifecycle_status`,{headers:{apikey:anon,Authorization:`Bearer ${ownerToken}`}});
+const pendingRows=await pending.json();
+assert(pending.ok&&pendingRows.length===1&&pendingRows[0].approval_status==="pending","New organisation should remain pending before platform approval");
+await rpc(adminToken,"decide_organisation_approval",{p_org:orgId,p_decision:"approved",p_category_key:"gym",p_reason:null});
+const approved=await fetch(base+`/rest/v1/organisations?id=eq.${orgId}&select=approval_status,lifecycle_status`,{headers:{apikey:anon,Authorization:`Bearer ${adminToken}`}});
+const approvedRows=await approved.json();
+assert(approved.ok&&approvedRows.length===1&&approvedRows[0].approval_status==="approved","Platform approval did not update organisation");
+const beforeActivation=await fetch(base+`/rest/v1/subscriptions?organisation_id=eq.${orgId}&select=id`,{headers:{apikey:anon,Authorization:`Bearer ${adminToken}`}});
+const beforeRows=await beforeActivation.json();
+assert(beforeActivation.ok&&beforeRows.length===0,"Category approval must not automatically activate a subscription");
+await rpc(adminToken,"assign_subscription",{p_org:orgId,p_plan_key:"trial",p_status:"trial",p_period_end:new Date(Date.now()+7*86400000).toISOString()});
+const afterActivation=await fetch(base+`/rest/v1/subscriptions?organisation_id=eq.${orgId}&select=id,status`,{headers:{apikey:anon,Authorization:`Bearer ${adminToken}`}});
+const afterRows=await afterActivation.json();
+assert(afterActivation.ok&&afterRows.length===1&&afterRows[0].status==="trial","Separate trial assignment did not create a trial subscription");
+console.log("PASS E2E: confirmed owner registered organisation; retry was idempotent");
+console.log("PASS E2E: organisation remained pending until platform admin approval");
+console.log("PASS E2E: category approval did not activate subscription");
+console.log("PASS E2E: platform admin separately assigned trial subscription");
+
 console.log("PASS cleanup: synthetic data is confined to the disposable stack; workflow teardown removes it");
