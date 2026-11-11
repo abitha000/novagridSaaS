@@ -2,8 +2,8 @@ import { supabase } from '../supabase'
 import { BackendError, run, toBackendError } from './errors'
 import type { Channel, Contact } from './types'
 
-const E164 = /^\\+[1-9]\\d{7,14}$/
-const clean = (s: string) => s.replace(/[,()%*\\\\:]/g, ' ').trim()
+const E164 = /^\+[1-9]\d{7,14}$/
+const clean = (s: string) => s.replace(/[,()%*\\:]/g, ' ').trim()
 
 export async function listContacts(tenantId: string, opts: { search?: string; page?: number; pageSize?: number } = {}) {
   const { search = '', page = 0, pageSize = 25 } = opts
@@ -22,7 +22,7 @@ export type ContactInput = { type: string; full_name: string; phone_e164?: strin
 function validate(i: ContactInput) {
   if (i.full_name.trim().length < 2) throw new BackendError('Name must be at least 2 characters.', 'validation')
   if (i.phone_e164 && !E164.test(i.phone_e164)) throw new BackendError('Phone must be international format, e.g. +919876543210.', 'validation')
-  if (i.email && !/^\\S+@\\S+\\.\\S+$/.test(i.email)) throw new BackendError('Enter a valid email address.', 'validation')
+  if (i.email && !/^\S+@\S+\.\S+$/.test(i.email)) throw new BackendError('Enter a valid email address.', 'validation')
 }
 const toInsertRow = (i: ContactInput, tenantId: string) => {
   validate(i)
