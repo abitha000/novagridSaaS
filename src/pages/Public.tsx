@@ -378,6 +378,47 @@ export function LoginPage() {
   )
 }
 
+/* ---------- Email confirmation and registration recovery ---------- */
+export function RegistrationStatusPage() {
+  const auth = useAuth()
+  const [checking, setChecking] = useState(false)
+  useEffect(() => {
+    if (auth.backend === 'live' && auth.session) void auth.refresh()
+  }, [auth.backend, auth.session?.user.id])
+  const refresh = async () => {
+    setChecking(true)
+    try { await auth.refresh() } finally { setChecking(false) }
+  }
+  const workspace = auth.workspaces[0]
+  const approval = workspace?.organisation?.approval_status
+  const confirmed = !!auth.user?.email_confirmed_at
+  let heading = 'Confirm your email'
+  let detail = 'Open the confirmation link sent by NOVAGRID. This page will show your organisation setup status after you return.'
+  if (auth.backend === 'checking') detail = 'Checking your account and registration status…'
+  else if (auth.backend === 'demo') { heading = 'Preview mode'; detail = auth.backendNote || 'The live NOVAGRID schema is not connected. No real registration has been submitted.' }
+  else if (!auth.session) { heading = 'Sign in to continue'; detail = 'After confirming your email, sign in with the account you registered. We will resume organisation setup automatically.' }
+  else if (!confirmed) { heading = 'Email confirmation pending'; detail = 'Your account is signed in, but its email is not confirmed yet. Open the latest confirmation email, then return here.' }
+  else if (auth.registrationError) { heading = 'Finish setting up your organisation'; detail = 'Your email is confirmed, but organisation creation did not finish. Retry safely; your registration token prevents duplicate organisations.' }
+  else if (approval === 'pending') { heading = 'Awaiting category approval'; detail = workspace?.organisation?.name + ' has been created. NOVAGRID must approve its industry before business modules unlock.' }
+  else if (approval === 'rejected') { heading = 'Registration needs attention'; detail = 'Your organisation was not approved. Contact NOVAGRID support for the next steps.' }
+  else if (approval === 'approved') { heading = 'Category approved'; detail = 'Your organisation category is approved. Subscription activation is a separate step; contact your platform administrator if your workspace is still locked.' }
+  else if (auth.ready && confirmed) { heading = 'Account confirmed'; detail = 'Your account is verified. If your organisation is not listed yet, retry setup or contact support.' }
+  return (
+    <div className="mx-auto max-w-xl px-5 py-20 text-center text-white">
+      <div className="mx-auto size-14 rounded-full bg-ng-indigo/20 text-ng-sky grid place-items-center"><I.MailCheck /></div>
+      <h1 className="mt-5 text-3xl font-bold">{heading}</h1>
+      <p className="mt-3 text-sm text-white/65">{detail}</p>
+      {auth.registrationError && <p className="mt-4 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{auth.registrationError}</p>}
+      {workspace?.organisation && <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-left"><div className="font-semibold">{workspace.organisation.name}</div><div className="mt-1 text-sm text-white/60">{workspace.organisation.industry?.name ?? 'Industry pending'} · {approval ?? 'Status unavailable'}</div></div>}
+      <div className="mt-7 flex flex-wrap justify-center gap-3">
+        <Button loading={checking} onClick={() => void refresh()}>Check status / retry setup</Button>
+        <Button variant="outline-dark" onClick={() => go('/login')}>Go to login</Button>
+        <Button variant="outline-dark" onClick={() => go('/')}>Back to site</Button>
+      </div>
+    </div>
+  )
+}
+
 /* ---------- Registration flow ---------- */
 export function RegisterPage() {
   const [step, setStep] = useState(0)
