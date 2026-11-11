@@ -1,6 +1,6 @@
 # NOVAGRID pre-production security review and rollout gate
 
-Status: review in progress. Do not apply the migrations to the live project until every gate below is complete.
+Status: PostgreSQL 17 migration CI passed on commit `225cd879ee6960d60f0572fe21f8f79a2472c664`. Production rollout remains blocked until staging, security, backup and application-level gates below are complete.
 
 ## Environment facts verified on 2026-11-10
 
@@ -8,7 +8,7 @@ Status: review in progress. Do not apply the migrations to the live project unti
 - The live database still has only the original `public.kv_store_5a875bd1` table and migration `20261110084730`.
 - No NOVAGRID relational migrations have been applied to the live project.
 - The existing KV table has RLS enabled and no policies. Preserve it; do not drop or expose it as part of NOVAGRID rollout.
-- The existing project has a SECURITY DEFINER event-trigger function `public.rls_auto_enable()` executable by anon and authenticated. Supabase Security Advisor flags this. Review/revoke its API-role EXECUTE grants as a separate legacy-scaffold hardening action before public launch; do not remove the event trigger or KV table without a separate decision.
+- The existing project has a SECURITY DEFINER event-trigger function `public.rls_auto_enable()` executable by anon and authenticated. The live Supabase Security Advisor still flags this because migration 0009 has not been applied to the live database. Migration 0009 revokes API-role EXECUTE grants while preserving the event trigger; verify the finding disappears after a controlled rollout. The KV table RLS-without-policy finding is intentional for the preserved scaffold and should not be exposed.
 
 ## Migration 0009
 
@@ -22,11 +22,11 @@ Status: review in progress. Do not apply the migrations to the live project unti
 - Attribute subscription audit events to their organisation tenant.
 - Tighten phone/email validation expressions.
 
-These latest edits require a fresh green GitHub Actions run. The earlier green run does not validate these subsequent commits.
+The latest branch head passed the PostgreSQL 17 GitHub Actions migration and smoke-test job. This validates migration syntax and the included smoke tests, not all application-level security gates.
 
 ## Security review gates
 
-1. Re-run GitHub Actions on the latest branch head; all ten migrations and smoke tests must pass.
+1. Keep the PostgreSQL 17 GitHub Actions check green on every change; all ten migrations and smoke tests passed on the current head.
 2. Expand automated tests for:
    - tenant A cannot read/write tenant B records;
    - wrong-tenant role assignment is rejected;
@@ -61,5 +61,5 @@ These latest edits require a fresh green GitHub Actions run. The earlier green r
 - Gym and Education launch prices in migration 0010 are proposed commercial rates and require validation before real billing.
 - No payment gateway activation/webhook flow is implemented yet.
 - No notification provider dispatcher or webhook handler is implemented yet.
-- Gym and Education domain-specific tables/flows are not part of these nine core migrations.
+- Gym and Education domain-specific tables/flows are not part of these ten migrations.
 - A green migration smoke test is not a substitute for application-level, adversarial RLS tests or a backup/restore rehearsal.
