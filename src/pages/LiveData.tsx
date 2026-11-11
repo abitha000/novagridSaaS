@@ -6,6 +6,7 @@ import { changeStaffRole, inviteStaff, listAssignableRoles, listStaff, setStaffS
 import { archiveContact, createContact, createContacts, listAllContacts, listContacts, recordConsent } from '../lib/api/contacts'
 import { contactsToCsv, parseContactsCsv, type CsvContactRow } from '../lib/csv'
 import type { Channel, Contact, StaffMember } from '../lib/api/types'
+import { createGymMembership, listGymMemberships, setGymMembershipStatus, type GymMembership } from '../lib/api/gym'
 
 const SchemaNote = ({ e }: { e: unknown }) =>
   e instanceof BackendError && e.kind === 'schema_missing' ? (
@@ -147,6 +148,78 @@ export function LivePayments({ tenantId }: { tenantId: string }) {
         <Field label="Payment method"><Select value={form.method} onChange={e=>setForm({...form,method:e.target.value as PaymentRecord['method']})}>{[['cash','Cash'],['upi','UPI'],['bank_transfer','Bank transfer'],['card','Card'],['cheque','Cheque'],['other','Other']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field>
         <Field label="Payment date"><Input type="date" value={form.paid_at} onChange={e=>setForm({...form,paid_at:e.target.value})}/></Field>
         <Field label="Reference (optional)"><Input value={form.reference} onChange={e=>setForm({...form,reference:e.target.value})}/></Field>
+        <Field label="Notes (optional)"><Input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
+      </div>
+    </Modal>
+  </>
+}
+
+
+/* ---------------- Gym memberships (live lifecycle) ---------------- */
+export function LiveGymMembers({ tenantId }: { tenantId: string }) {
+  const toast = useToast()
+  const [rows, setRows] = useState<GymMembership[] | null>(null)
+  const [people, setPeople] = useState<Contact[]>([])
+  const [query, setQuery] = useState('')
+  const [tab, setTab] = useState('all')
+  const [error, setError] = useState<unknown>(null)
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [form, setForm] = useState({ contact_id: '', plan_name: 'Monthly', start_date: new Date().toISOString().slice(0,10), end_date: new Date(Date.now()+30*86400000).toISOString().slice(0,10), amount: '1800', notes: '' })
+
+  const load = useCallback(() => {
+    setError(null)
+    Promise.all([listGymMemberships(tenantId), listAllContacts(tenantId)]).then(([m,c]) => { setRows(m); setPeople(c.filter(x => x.type === 'member' || x.type === 'person')) }).catch(e => { setError(e); setRows([]) })
+  }, [tenantId])
+  useEffect(load, [load])
+
+  const stateOf = (r: GymMembership) => r.status !== 'active' ? r.status : r.end_date < new Date().toISOString().slice(0,10) ? 'expired' : 'active'
+  const filtered = (rows ?? []).filter(r => {
+    const state = stateOf(r)
+    return (tab === 'all' || (tab === 'active' ? state === 'active' : tab === 'expired' ? state === 'expired' : state === tab))
+      && [r.contact?.full_name ?? '', r.plan_name, r.contact?.phone_e164 ?? ''].some(v => v.toLowerCase().includes(query.toLowerCase()))
+  })
+  const amount = (n:number) => new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n/100)
+  const counts = { active: (rows ?? []).filter(r => stateOf(r)==='active').length, expired: (rows ?? []).filter(r => stateOf(r)==='expired').length, paused: (rows ?? []).filter(r => r.status==='paused').length }
+
+  const changeStatus = async (r: GymMembership, status: GymMembership['status']) => {
+    try { await setGymMembershipStatus(r.id,status); toast(status==='active'?'Membership activated':status==='paused'?'Membership paused':'Membership cancelled'); load() }
+    catch(e) { toast(errorMessage(e),'err') }
+  }
+
+  return <>
+    <PageHeader title="Gym members" sub="Live membership records for this organisation." actions={<Button icon={<I.UserPlus size={16}/>} onClick={()=>setOpen(true)}>Add membership</Button>}/>
+    <SchemaNote e={error}/>
+    <div className="grid sm:grid-cols-3 gap-4 mb-4">
+      <Stat label="Active memberships" value={String(counts.active)} icon={<I.UserCheck size={18}/>}/>
+      <Stat label="Expired" value={String(counts.expired)} icon={<I.CalendarX size={18}/>}/>
+      <Stat label="Paused" value={String(counts.paused)} icon={<I.PauseCircle size={18}/>}/>
+    </div>
+    <Card>
+      <div className="p-4 border-b border-ng-line flex flex-col sm:flex-row gap-3 justify-between">
+        <SearchBox value={query} onChange={setQuery} placeholder="Search member or plan" className="sm:w-72"/>
+        <Tabs value={tab} onChange={setTab} tabs={[{id:'all',label:'All'},{id:'active',label:'Active',count:counts.active},{id:'expired',label:'Expired',count:counts.expired},{id:'paused',label:'Paused',count:counts.paused},{id:'cancelled',label:'Cancelled'}]}/>
+      </div>
+      {error && !(error instanceof BackendError && error.kind==='schema_missing') ? <ErrorState onRetry={load} body={errorMessage(error)}/> :
+      <DataTable loading={rows===null} rows={filtered} empty={<EmptyState title="No memberships found" body={query?'Try another search.':'Add a membership to start tracking renewals.'} action={<Button onClick={()=>setOpen(true)}>Add membership</Button>}/>} cols={[
+        {key:'member',header:'Member',mobile:'title',render:r=><div className="flex items-center gap-3"><Avatar name={r.contact?.full_name ?? 'Member'}/><div><div className="font-medium">{r.contact?.full_name ?? 'Member'}</div><div className="text-xs text-ng-mute">{r.contact?.phone_e164 ? mask(r.contact.phone_e164) : r.contact?.email ?? '—'}</div></div></div>},
+        {key:'plan',header:'Plan',render:r=><div><div className="font-medium">{r.plan_name}</div><div className="text-xs text-ng-mute">{amount(r.amount_paise)}</div></div>},
+        {key:'dates',header:'Period',render:r=><span className="text-sm">{new Date(r.start_date+'T00:00:00').toLocaleDateString('en-IN')} – {new Date(r.end_date+'T00:00:00').toLocaleDateString('en-IN')}</span>},
+        {key:'status',header:'Status',render:r=><Status value={stateOf(r)}/>},
+        {key:'actions',header:'',mobile:'hide',render:r=><Dropdown label={'Membership actions for '+(r.contact?.full_name ?? 'member')} trigger={<span className="size-8 grid place-items-center rounded-lg hover:bg-ng-tint"><I.MoreHorizontal size={18}/></span>} items={[
+          ...(r.status==='active'?[{label:'Pause membership',icon:<I.Pause size={16}/>,onClick:()=>void changeStatus(r,'paused')}]:[]),
+          ...(r.status==='paused'?[{label:'Reactivate',icon:<I.Play size={16}/>,onClick:()=>void changeStatus(r,'active')}]:[]),
+          ...(r.status!=='cancelled'?[{label:'Cancel membership',icon:<I.Ban size={16}/>,danger:true,onClick:()=>void changeStatus(r,'cancelled')}]:[])
+        ]}/>},
+      ]}/>}
+    </Card>
+    <Modal open={open} onClose={()=>setOpen(false)} title="Add gym membership" footer={<><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button loading={busy} disabled={!form.contact_id || form.plan_name.trim().length<2 || !/^\\d+(\\.\\d{1,2})?$/.test(form.amount) || Number(form.amount)<0} onClick={async()=>{setBusy(true);try{await createGymMembership(tenantId,{contact_id:form.contact_id,plan_name:form.plan_name,start_date:form.start_date,end_date:form.end_date,amount_paise:Math.round(Number(form.amount)*100),notes:form.notes});toast('Membership created');setOpen(false);load()}catch(e){toast(errorMessage(e),'err')}finally{setBusy(false)}}}>Save membership</Button></>}>
+      <div className="space-y-4">
+        <Field label="Member"><Select value={form.contact_id} onChange={e=>setForm({...form,contact_id:e.target.value})}><option value="">Choose member</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</Select></Field>
+        <Field label="Plan name"><Input value={form.plan_name} onChange={e=>setForm({...form,plan_name:e.target.value})}/></Field>
+        <Field label="Start date"><Input type="date" value={form.start_date} onChange={e=>setForm({...form,start_date:e.target.value})}/></Field>
+        <Field label="End date"><Input type="date" value={form.end_date} onChange={e=>setForm({...form,end_date:e.target.value})}/></Field>
+        <Field label="Membership price (INR)"><Input inputMode="decimal" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/></Field>
         <Field label="Notes (optional)"><Input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
       </div>
     </Modal>
