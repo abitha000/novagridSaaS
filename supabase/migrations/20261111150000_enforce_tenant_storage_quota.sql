@@ -69,7 +69,7 @@ begin
   from public.subscription_addons a
   join public.subscription_addon_catalogue c
     on c.addon_key = a.addon_key and c.active
-  where a.v_subscription_id = v_subscription_id
+  where a.subscription_id = v_subscription_id
     and a.addon_key = 'extra_storage';
 
   -- Security-definer execution can see the full bucket usage, independent of caller RLS.
