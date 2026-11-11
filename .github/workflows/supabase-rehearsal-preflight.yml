@@ -1,0 +1,42 @@
+name: Supabase isolated-project preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_project_ref:
+        description: "Disposable Supabase project ref (must not be production)"
+        required: true
+        type: string
+      confirm_target_project_ref:
+        description: "Type the same disposable project ref again to confirm"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.REHEARSAL_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.REHEARSAL_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.REHEARSAL_SUPABASE_SERVICE_ROLE_KEY }}
+      EXPECTED_PROJECT_REF: ${{ inputs.target_project_ref }}
+      CONFIRM_REHEARSAL_PROJECT_REF: ${{ inputs.confirm_target_project_ref }}
+      PRODUCTION_PROJECT_REF: ${{ vars.NOVAGRID_PRODUCTION_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify required secrets and target guard
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_ANON_KEY"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          test -n "$PRODUCTION_PROJECT_REF"
+          test "$EXPECTED_PROJECT_REF" = "$CONFIRM_REHEARSAL_PROJECT_REF"
+          test "$EXPECTED_PROJECT_REF" != "$PRODUCTION_PROJECT_REF"
+      - name: Run non-destructive Supabase API preflight
+        run: node scripts/supabase-rehearsal-preflight.mjs
