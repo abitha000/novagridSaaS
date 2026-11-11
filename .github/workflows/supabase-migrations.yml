@@ -3,6 +3,7 @@ name: Supabase migration validation
 on:
   push:
     branches:
+      - main
       - fix/novagrid-migrations-clean-pr
   pull_request:
     branches:
@@ -42,5 +43,18 @@ jobs:
             echo "Applying $migration"
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
-      - name: Run schema and tenant-isolation smoke tests
+      - name: Run schema, tenant-isolation, permissions and pricing tests
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/migration-smoke.sql
+      - name: Verify legacy SECURITY DEFINER RPC grants
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $check$
+          BEGIN
+            IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL
+              AND (has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE')
+                OR has_function_privilege('authenticated', 'public.rls_auto_enable()', 'EXECUTE')) THEN
+              RAISE EXCEPTION 'legacy RLS helper remains executable by API roles';
+            END IF;
+          END
+          $check$;
+          SQL
