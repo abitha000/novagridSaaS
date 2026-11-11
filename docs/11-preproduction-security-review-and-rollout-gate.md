@@ -1,6 +1,6 @@
 # NOVAGRID pre-production security review and rollout gate
 
-Status: PostgreSQL 17 migration CI passed on commit `225cd879ee6960d60f0572fe21f8f79a2472c664`. Production rollout remains blocked until staging, security, backup and application-level gates below are complete.
+Status: zero-additional-cost PostgreSQL 17 CI is configured on `main`. Production rollout remains blocked until the latest CI run, security, backup and application-level gates below are complete.
 
 ## Environment facts verified on 2026-11-10
 
@@ -24,10 +24,18 @@ Status: PostgreSQL 17 migration CI passed on commit `225cd879ee6960d60f0572fe21f
 
 The latest branch head passed the PostgreSQL 17 GitHub Actions migration and smoke-test job. This validates migration syntax and the included smoke tests, not all application-level security gates.
 
+## Zero-additional-cost validation environment
+
+- Do not create a paid Supabase branch or another Supabase project for routine staging.
+- GitHub Actions provisions an ephemeral PostgreSQL 17 service container for each CI run, applies all committed migrations, and runs the SQL smoke tests. The container is discarded after the job.
+- Vercel Preview deployments may be used for frontend review with non-production test credentials. Never point preview builds at production write credentials.
+- This PostgreSQL container is not a complete Supabase emulator: Auth, Storage, Edge Functions, Realtime, provider webhooks and production backup/restore still require separate validation.
+- Production Supabase remains read-only until an approved rollout window and verified backup are in place.
+
 ## Security review gates
 
 1. Keep the PostgreSQL 17 GitHub Actions check green on every change; all ten migrations and smoke tests passed on the current head.
-2. Expand automated tests for:
+2. Automated smoke tests now include tenant isolation, cross-tenant writes, platform-only approval/suspension/subscription RPC denial for tenant owners, legacy SECURITY DEFINER RPC grants, plan/category alignment, capacity/pricing catalogue checks and last-owner protections. Continue expanding tests for:
    - tenant A cannot read/write tenant B records;
    - wrong-tenant role assignment is rejected;
    - tenant role ownership cannot be reassigned;
