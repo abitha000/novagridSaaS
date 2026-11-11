@@ -285,8 +285,8 @@ reset role;
 
 
 -- Storage read isolation and mutation lifecycle checks. The test-only Storage
-// fixture validates SQL policy behavior; it is not a substitute for testing
-// the real Supabase Storage API and signed-URL flow.
+-- fixture validates SQL policy behavior; it is not a substitute for testing
+-- the real Supabase Storage API and signed-URL flow.
 reset role;
 insert into storage.objects (bucket_id,name,metadata)
 values ('novagrid-files','20000000-0000-0000-0000-000000000002/documents/tenant-b.pdf','{"size":1000}'::jsonb);
