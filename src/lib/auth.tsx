@@ -16,6 +16,7 @@ type PendingRegistration = { token: string; input: RegistrationInput }
 type Ctx = {
   backend: Backend
   backendNote: string
+  registrationError: string | null
   session: Session | null
   user: User | null
   ready: boolean
@@ -47,6 +48,7 @@ const TENANT_KEY = 'ng_active_tenant'
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [backend, setBackend] = useState<Backend>('checking')
   const [backendNote, setNote] = useState('')
+  const [registrationError, setRegistrationError] = useState<string | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [ready, setReady] = useState(false)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
@@ -85,13 +87,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      // Finish a registration started before email confirmation (idempotent via registration token).
+      // Complete email-confirmed registrations. The registration token makes retries safe.
       const pending = session.user.user_metadata?.pending_registration as PendingRegistration | undefined
-      if (pending && !completing.current && session.user.email_confirmed_at) {
+      if (pending && session.user.email_confirmed_at && !completing.current) {
         completing.current = true
         try {
           await registerOrganisation(pending.token, pending.input)
-          await supabase.auth.updateUser({ data: { pending_registration: null } })
+          const { error } = await supabase.auth.updateUser({ data: { pending_registration: null } })
+          if (error) throw error
+          setRegistrationError(null)
+        } catch (e) {
+          setRegistrationError(e instanceof Error ? e.message : 'Organisation setup could not be completed. Please retry.')
         } finally {
           completing.current = false
         }
@@ -118,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       backend,
       backendNote,
+      registrationError,
       session,
       user: session?.user ?? null,
       ready: backend !== 'checking' && ready,
@@ -141,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin + window.location.pathname, data: { full_name: reg.input.ownerName, pending_registration: reg } },
+          options: { emailRedirectTo: window.location.origin + window.location.pathname + '#/register/complete', data: { full_name: reg.input.ownerName, pending_registration: reg } },
         })
         if (error) throw new Error(error.message)
         return { needsEmailConfirmation: !data.session }
@@ -153,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       refresh: load,
     }),
-    [backend, backendNote, session, ready, workspaces, platformRole, activeTenantId, load],
+    [backend, backendNote, registrationError, session, ready, workspaces, platformRole, activeTenantId, load],
   )
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>
 }

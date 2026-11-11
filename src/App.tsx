@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { go, useRoute } from './lib/router'
 import { Button, EmptyState, ToastProvider } from './ui'
 import { Intro, INTRO_KEY } from './pages/Intro'
-import { ContactPage, FeaturesPage, Home, IndustriesPage, LoginPage, PricingPage, ProductPage, PublicLayout, RegisterPage, SecurityPage } from './pages/Public'
+import { ContactPage, FeaturesPage, Home, IndustriesPage, LoginPage, PricingPage, ProductPage, PublicLayout, RegisterPage, RegistrationStatusPage, SecurityPage } from './pages/Public'
 import * as P from './pages/Platform'
 import { WorkspaceLayout, WorkspaceOverview, PeoplePage, StaffPage, OperationsPage, ModulePage, PaymentsPage, ReportsPage, AutomationPage, SettingsPage, isInd } from './pages/Workspace'
 import { CommsPage } from './pages/Comms'
@@ -116,8 +116,8 @@ function Routes() {
     page = <DesignLayout path={path}>{parts[1] ? (m[parts[1]] ?? <NotFound />) : <DesignIndex />}</DesignLayout>
   } else if (path === '/login') {
     page = <PublicLayout path={path}><LoginPage /></PublicLayout>
-  } else if (path === '/register') {
-    page = <PublicLayout path={path}><RegisterPage /></PublicLayout>
+  } else if (path === '/register' || path === '/register/complete') {
+    page = <PublicLayout path={path}>{path === '/register/complete' ? <RegistrationStatusPage /> : <RegisterPage />}</PublicLayout>
   } else {
     const m: Record<string, ReactNode> = { '/': <Home />, '/product': <ProductPage />, '/industries': <IndustriesPage />, '/features': <FeaturesPage />, '/security': <SecurityPage />, '/pricing': <PricingPage />, '/contact': <ContactPage /> }
     page = <PublicLayout path={path}>{m[path] ?? <NotFound dark />}</PublicLayout>
