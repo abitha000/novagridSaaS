@@ -71,3 +71,43 @@ export const listSubscriptionsAdmin = () =>
       .select('id,status,period_start,period_end,organisation:organisations(id,name,approval_status,lifecycle_status,industry:industry_categories(key,name)),plan:subscription_plans(key,name,price_inr_monthly,price_inr_yearly)')
       .order('created_at', { ascending: false }) as never,
   )
+
+
+export type OrganisationSubscription = {
+  id: string
+  status: SubscriptionAdminRow['status']
+  period_start: string
+  period_end: string
+  plan: { key: string; name: string; price_inr_monthly: number; price_inr_yearly: number; limits: Record<string, number> } | null
+}
+export type IndustryPlan = {
+  key: string
+  name: string
+  price_inr_monthly: number
+  price_inr_yearly: number
+  limits: Record<string, number>
+}
+
+/** Current tenant subscription, constrained by tenant RLS. */
+export const getMySubscription = (tenantId: string) =>
+  run<OrganisationSubscription | null>(
+    supabase.from('subscriptions')
+      .select('id,status,period_start,period_end,plan:subscription_plans(key,name,price_inr_monthly,price_inr_yearly,limits)')
+      .eq('organisation_id', tenantId)
+      .in('status', ['trial','active','grace','read_only'])
+      .maybeSingle() as never,
+  )
+
+/** Active plans scoped to the approved industry category. */
+export async function listIndustryPlans(industryKey: string): Promise<IndustryPlan[]> {
+  const categories = await listCategories()
+  const category = categories.find((item: { key: string }) => item.key === industryKey)
+  if (!category) return []
+  return run<IndustryPlan[]>(
+    supabase.from('subscription_plans')
+      .select('key,name,price_inr_monthly,price_inr_yearly,limits')
+      .eq('active', true)
+      .eq('industry_category_id', category.id)
+      .order('price_inr_monthly'),
+  )
+}
