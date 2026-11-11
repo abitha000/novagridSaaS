@@ -28,6 +28,12 @@ declare
 begin
   if new.status not in ('active','invited') then return new; end if;
   if tg_op = 'UPDATE' and old.status in ('active','invited') then return new; end if;
+  -- Registration must be able to create the first owner before a subscription exists.
+  if tg_op='INSERT' and new.status='active'
+    and exists(select 1 from public.roles r where r.id=new.role_id and r.tenant_id is null and r.key='owner')
+    and not exists(select 1 from public.tenant_users tu where tu.tenant_id=new.tenant_id) then
+    return new;
+  end if;
   perform 1 from public.organisations where id = new.tenant_id for update;
 
   select p.limits into v_limits
