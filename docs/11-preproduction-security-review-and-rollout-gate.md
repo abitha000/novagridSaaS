@@ -62,9 +62,14 @@ The latest branch head passed the PostgreSQL 17 GitHub Actions migration and smo
 5. Run Supabase Security, Performance and Health Advisors; resolve all NOVAGRID findings.
 6. Bootstrap the first platform super-admin through a secure one-time procedure; verify the admin can sign in and no tenant can impersonate platform roles.
 7. Connect the app and verify registration, approval, subscription assignment, staff invitations, contact CRUD and tenant isolation with two test organisations.
-8. Keep provider dispatch disabled until its separate delivery pipeline is implemented.\n9. Before enabling tenant file management on a real project, run the Storage rehearsal below with two disposable organisations and authenticated users.
+8. Keep provider dispatch disabled until its separate delivery pipeline is implemented.
+9. Before enabling tenant file management on a real project, run the Storage rehearsal below with two disposable organisations and authenticated users.
 
-## Required real-Supabase Storage rehearsal (not covered by PostgreSQL CI)\n\nUse disposable test organisations only after the reviewed migrations have been applied in an approved environment. Do not use production customer files. Verify: (1) authenticated tenant A can list, upload, open and delete its own file; (2) tenant A cannot list, sign, overwrite or delete tenant B's object by guessing its path; (3) a non-member receives no object metadata or signed URL; (4) expired, suspended and non-approved organisations cannot upload, update or delete; (5) a file larger than remaining quota is rejected and concurrent uploads cannot exceed quota; (6) pagination returns all files when more than 1,000 objects exist; (7) Storage object metadata reports byte size as expected; and (8) signed URLs expire after the configured 60 seconds. Record the project, test identities, outcomes and cleanup. Never place service-role credentials in the browser.\n\n## Known product limitations
+## Required real-Supabase Storage rehearsal (not covered by PostgreSQL CI)
+
+Use disposable test organisations only after the reviewed migrations have been applied in an approved environment. Do not use production customer files. Verify: (1) authenticated tenant A can list, upload, open and delete its own file; (2) tenant A cannot list, sign, overwrite or delete tenant B's object by guessing its path; (3) a non-member receives no object metadata or signed URL; (4) expired, suspended and non-approved organisations cannot upload, update or delete; (5) a file larger than remaining quota is rejected and concurrent uploads cannot exceed quota; (6) pagination returns all files when more than 1,000 objects exist; (7) Storage object metadata reports byte size as expected; and (8) signed URLs expire after the configured 60 seconds. Record the project, test identities, outcomes and cleanup. Never place service-role credentials in the browser.
+
+## Known product limitations
 
 - Gym and Education launch prices in migration 0010 are proposed commercial rates and require validation before real billing.
 - No payment gateway activation/webhook flow is implemented yet.
