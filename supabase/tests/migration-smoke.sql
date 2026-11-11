@@ -318,3 +318,31 @@ $storage_isolation$;
 reset role;
 update public.subscriptions set status='active'
 where organisation_id='20000000-0000-0000-0000-000000000001';
+
+-- PR #21 regression assertions.
+do $pr21$
+begin
+ if has_function_privilege('authenticated','private.guard_owner_role_change()','EXECUTE') then
+   raise exception 'authenticated can execute internal owner trigger'; end if;
+ if has_function_privilege('authenticated','private.audit_row()','EXECUTE') then
+   raise exception 'authenticated can execute internal audit trigger'; end if;
+ if not has_function_privilege('authenticated','private.is_writable(uuid)','EXECUTE') then
+   raise exception 'authenticated cannot execute RLS write helper'; end if;
+ if has_function_privilege('service_role','private.check_notification_usage_quota()','EXECUTE') then
+   raise exception 'service role can execute internal quota trigger'; end if;
+ if position('selected plan is unavailable for this industry' in pg_get_functiondef(
+   'public.register_organisation(uuid,text,text,text,text,text,text,text,text,text,text)'::regprocedure))=0 then
+   raise exception 'registration plan validation missing'; end if;
+end
+$pr21$;
+
+do $pr21_channel$
+declare v_tenant uuid:='20000000-0000-0000-0000-000000000001'; v_plan uuid; v_module uuid;
+begin
+ select id into v_plan from public.subscription_plans where key='gym_starter';
+ select id into v_module from public.module_catalogue where key='core.whatsapp';
+ delete from public.plan_entitlements where plan_id=v_plan and module_id=v_module;
+ if private.has_module_access(v_tenant,'core.whatsapp') then
+   raise exception 'WhatsApp access granted without channel entitlement'; end if;
+end
+$pr21_channel$;
