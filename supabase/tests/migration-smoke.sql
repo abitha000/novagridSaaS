@@ -210,4 +210,44 @@ begin
 end
 $capacity$;
 
+
+-- Monthly messaging quota is enforced only when a commercial allowance is configured.
+update public.subscription_plans
+set limits = jsonb_set(limits, '{messages_per_month}', '1'::jsonb)
+where key='gym_starter';
+
+do $message_quota$
+declare
+  n1 uuid := gen_random_uuid();
+  n2 uuid := gen_random_uuid();
+  r1 uuid := gen_random_uuid();
+  r2 uuid := gen_random_uuid();
+  contact_id uuid;
+begin
+  select id into contact_id from public.contacts
+    where tenant_id='20000000-0000-0000-0000-000000000001' limit 1;
+  insert into public.notifications
+    (id,tenant_id,title,channel,body,audience_definition,status)
+  values
+    (n1,'20000000-0000-0000-0000-000000000001','Quota test 1','sms','Test body','{"type":"all"}','queued');
+  insert into public.notification_recipients
+    (id,tenant_id,notification_id,contact_id,channel,idempotency_key,status)
+  values
+    (r1,'20000000-0000-0000-0000-000000000001',n1,contact_id,'sms','quota-test-1','queued');
+
+  insert into public.notifications
+    (id,tenant_id,title,channel,body,audience_definition,status)
+  values
+    (n2,'20000000-0000-0000-0000-000000000001','Quota test 2','sms','Test body','{"type":"all"}','queued');
+  begin
+    insert into public.notification_recipients
+      (id,tenant_id,notification_id,contact_id,channel,idempotency_key,status)
+    values
+      (r2,'20000000-0000-0000-0000-000000000001',n2,contact_id,'sms','quota-test-2','queued');
+    raise exception 'monthly message quota was bypassed';
+  exception when check_violation then null;
+  end;
+end
+$message_quota$;
+
 select 'NOVAGRID migration and security smoke tests passed' as result;
