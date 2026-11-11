@@ -211,6 +211,24 @@ end
 $capacity$;
 
 
+-- Pending invitations reserve staff seats just like active staff.
+do $invitation_capacity$
+declare v_rejected boolean:=false;
+begin
+  begin
+    insert into public.tenant_users(tenant_id,user_id,role_id,full_name,email,status)
+    select '20000000-0000-0000-0000-000000000001',
+      '10000000-0000-0000-0000-000000000002',r.id,'Pending invite','pending-invite@example.test','invited'
+    from public.roles r where r.tenant_id is null and r.key='readonly';
+  exception when check_violation then
+    v_rejected:=true;
+  end;
+  if not v_rejected then
+    raise exception 'pending staff invitation bypassed the staff-seat limit';
+  end if;
+end
+$invitation_capacity$;
+
 -- Monthly messaging quota is enforced only when a commercial allowance is configured.
 update public.subscription_plans
 set limits = jsonb_set(limits, '{messages_per_month}', '1'::jsonb)
