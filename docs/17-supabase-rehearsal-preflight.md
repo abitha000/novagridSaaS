@@ -16,7 +16,7 @@ The operator must enter the rehearsal project ref twice when manually dispatchin
 
 ## What it verifies
 
-- The public schema-version RPC returns version 10.
+- The public schema-version RPC returns version 11.
 - Anonymous PostgREST access returns no organisation rows.
 - The private `novagrid-files` Storage bucket exists and is not public.
 - The anon and service-role keys are distinct.
