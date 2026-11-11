@@ -8,6 +8,7 @@ import * as P from './pages/Platform'
 import { WorkspaceLayout, WorkspaceOverview, PeoplePage, StaffPage, OperationsPage, ModulePage, PaymentsPage, ReportsPage, AutomationPage, SettingsPage, isInd } from './pages/Workspace'
 import { CommsPage } from './pages/Comms'
 import { BillingPage } from './pages/Billing'
+import { FilesPage } from './pages/Files'
 import { BrandPage, DesignIndex, DesignLayout, MobilePage, MotionPage, SystemPage } from './pages/Design'
 
 const seen = () => {
@@ -110,6 +111,7 @@ function Routes() {
       : s === 'automation' ? <AutomationPage ind={ind} />
       : s === 'settings' ? <SettingsPage ind={ind} />
       : s === 'billing' ? <BillingPage ind={ind as 'gym' | 'education'} />
+      : s === 'files' ? <FilesPage />
       : <NotFound />
     page = <Gate kind="app" ind={ind}><WorkspaceLayout ind={ind} path={path}>{body}</WorkspaceLayout></Gate>
   } else if (parts[0] === 'design') {
