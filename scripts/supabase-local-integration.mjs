@@ -48,8 +48,9 @@ assert((anonRows.ok&&Array.isArray(anonData)&&anonData.length===0)||[401,403].in
 console.log("PASS Anonymous PostgREST: organisation rows are inaccessible or empty");
 
 async function storageUpload(token,tenant,path,expectOk){
+ const payload=Buffer.from("NOVAGRID isolated integration fixture","utf8");
  const r=await fetch(base+`/storage/v1/object/novagrid-files/${tenant}/files/${path}`,{
-  method:"POST",headers:{apikey:anon,Authorization:`Bearer ${token}`,"Content-Type":"text/plain","x-upsert":"false"},body:"NOVAGRID isolated integration fixture"
+  method:"POST",headers:{apikey:anon,Authorization:`Bearer ${token}`,"Content-Type":"text/plain","Content-Length":String(payload.byteLength),"x-upsert":"false"},body:payload
  });
  const raw=await r.text();
  assert(expectOk?r.ok:!r.ok,expectOk?`Own-tenant Storage upload failed: ${raw}`:`Cross-tenant Storage upload unexpectedly succeeded: ${raw}`);
