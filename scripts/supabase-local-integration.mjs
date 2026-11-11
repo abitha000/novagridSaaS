@@ -132,6 +132,10 @@ console.log("PASS E2E: platform admin separately assigned trial subscription");
  assert(crossTenantRole.status!==0&&String(crossTenantRole.stderr).includes("staff role belongs to a different organisation"),"Cross-tenant role assignment was not rejected by the database");
 
  const operatorToken=await loginAs("staff-operator@novagrid.test");
+ const ownerCanManage=await rpc(ownerToken,"can_manage_staff",{p_tenant:orgId});
+ assert(ownerCanManage===true,"Organisation owner should be allowed to manage staff");
+ const operatorCanManage=await rpc(operatorToken,"can_manage_staff",{p_tenant:"21000000-0000-0000-0000-000000000001"});
+ assert(operatorCanManage===false,"Operator without staff.manage unexpectedly passed authorization");
  const targetQuery=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${targetId}&select=id,status`,{headers:{apikey:anon,Authorization:`Bearer ${ownerToken}`}});
  const targetMemberships=await targetQuery.json();
  assert(targetQuery.ok&&targetMemberships.length===1,"Invited staff fixture was not created");
