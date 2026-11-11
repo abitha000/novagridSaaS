@@ -3,7 +3,7 @@ name: Supabase migration validation
 on:
   push:
     branches:
-      - fix/initial-supabase-migrations
+      - fix/novagrid-migrations-clean-pr
   pull_request:
     branches:
       - main
