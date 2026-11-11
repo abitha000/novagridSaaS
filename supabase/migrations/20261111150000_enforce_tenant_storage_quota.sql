@@ -20,6 +20,7 @@ declare
   addon_limit_bytes bigint := 0;
   current_usage_bytes bigint := 0;
   incoming_bytes bigint := 0;
+  excluded_object_id uuid := null;
 begin
   if new.bucket_id <> 'novagrid-files' then
     return new;
@@ -34,6 +35,7 @@ begin
     raise exception 'file size metadata is required for storage quota enforcement' using errcode = '22023';
   end if;
   incoming_bytes := (new.metadata->>'size')::bigint;
+  if tg_op = 'UPDATE' then excluded_object_id := old.id; end if;
 
   -- Serialize writes for a tenant so concurrent uploads cannot overshoot the quota.
   perform 1 from public.organisations where id = tenant for update;
@@ -76,7 +78,7 @@ begin
   from storage.objects o
   where o.bucket_id = 'novagrid-files'
     and split_part(o.name, '/', 1) = tenant::text
-    and (tg_op <> 'UPDATE' or o.id <> old.id);
+    and o.id is distinct from excluded_object_id;
 
   if current_usage_bytes + incoming_bytes > base_limit_bytes + addon_limit_bytes then
     raise exception 'organisation storage quota exceeded. Upgrade your plan or add storage.' using errcode = '23514';
