@@ -37,6 +37,20 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Verify Auth, PostgREST tenant isolation and Storage API
         run: node scripts/supabase-local-integration.mjs
+      - name: Capture local Storage diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== Running containers ==="
+          docker ps -a --format 'table {{.Names}}\\t{{.Status}}'
+          echo "=== Storage service logs ==="
+          for id in $(docker ps -aq --filter "name=storage"); do
+            docker logs --tail 250 "$id" 2>&1 || true
+          done
+          echo "=== Database logs ==="
+          for id in $(docker ps -aq --filter "name=db"); do
+            docker logs --tail 250 "$id" 2>&1 || true
+          done
       - name: Stop isolated Supabase stack
         if: always()
         run: supabase stop --no-backup
