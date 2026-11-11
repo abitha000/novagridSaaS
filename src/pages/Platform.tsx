@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth } from '../lib/auth'
-import { decideApproval, listOrganisationsAdmin } from '../lib/api/organisations'
+import { decideApproval, listOrganisationsAdmin, listSubscriptionsAdmin } from '../lib/api/organisations'
 import { approvals, industries, months, orgGrowth, orgs, planTiers, industryPlanTiers, revenue, inr, type Org } from '../data'
 import { AreaChart, Avatar, Badge, BarChart, Button, Card, CardHeader, Confirm, DataTable, Donut, Dropdown, EmptyState, ErrorState, Field, Logo, Modal, PageHeader, SearchBox, Select, Stat, Status, Tabs, Textarea, Toggle, cx, useFakeLoad, useToast, Skel } from '../ui'
 
@@ -292,14 +292,56 @@ export function IndustriesAdmin() {
 }
 
 export function SubscriptionsAdmin() {
+  const auth = useAuth()
   const [filter, setFilter] = useState('All')
-  const rows = orgs.filter((o) => o.status !== 'Pending').filter((o) => filter === 'All' || o.status === filter)
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof listSubscriptionsAdmin>>>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    listSubscriptionsAdmin()
+      .then((data) => { if (alive) { setRows(data); setError(null) } })
+      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'Could not load subscriptions') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [attempt, auth.session?.user.id])
+
+  const visible = rows.filter((r) => filter === 'All' || r.status.toLowerCase() === filter.toLowerCase())
+  const counts = {
+    active: rows.filter((r) => r.status === 'active').length,
+    trial: rows.filter((r) => r.status === 'trial').length,
+    attention: rows.filter((r) => ['grace', 'read_only', 'suspended', 'expired'].includes(r.status)).length,
+  }
   return (
     <>
-      <PageHeader title="Subscriptions" sub="Plan, status and renewal for every organisation." />
-      <div className="grid sm:grid-cols-3 gap-4 mb-4"><Stat label="Active" value="108" icon={<I.CircleCheck size={18} />} /><Stat label="In grace period" value="7" icon={<I.Clock size={18} />} /><Stat label="Read-only / suspended" value="5" icon={<I.Lock size={18} />} /></div>
-      <Card><div className="p-4 border-b border-ng-line"><Select className="sm:!w-48" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Status"><option>All</option><option>Active</option><option>Trial</option><option>Grace</option><option>Suspended</option></Select></div>
-        <DataTable rows={rows} cols={[{ key: 'name', header: 'Organisation', mobile: 'title', render: (o) => <span className="font-medium">{o.name}</span> }, { key: 'plan', header: 'Plan' }, { key: 'status', header: 'Status', render: (o) => <Status value={o.status} /> }, { key: 'r', header: 'Renews', render: () => '14 Jun 2025' }, { key: 'mrr', header: 'MRR', render: (o) => (o.plan === 'Enterprise' ? '₹24,000' : o.plan === 'Professional' ? '₹4,166' : '₹1,200') }]} /></Card>
+      <PageHeader title="Subscriptions" sub="Live subscription records from the NOVAGRID database. Payment processing and automatic renewals are not connected." actions={<Badge tone="warn">Manual administration only</Badge>} />
+      <div className="grid sm:grid-cols-3 gap-4 mb-4">
+        <Stat label="Active" value={String(counts.active)} icon={<I.CircleCheck size={18} />} />
+        <Stat label="Trial" value={String(counts.trial)} icon={<I.Clock size={18} />} />
+        <Stat label="Needs attention" value={String(counts.attention)} icon={<I.AlertTriangle size={18} />} />
+      </div>
+      <Card>
+        <div className="p-4 border-b border-ng-line flex flex-wrap items-center gap-3">
+          <Select className="sm:!w-48" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Subscription status">
+            {['All', 'Trial', 'Active', 'Grace', 'Read_only', 'Suspended', 'Expired', 'Cancelled'].map((s) => <option key={s}>{s}</option>)}
+          </Select>
+          <div className="flex-1" />
+          <Button size="sm" variant="secondary" onClick={() => setAttempt((v) => v + 1)} disabled={loading}><I.RefreshCw size={15} /> Refresh</Button>
+        </div>
+        {error ? <ErrorState onRetry={() => setAttempt((v) => v + 1)} /> : (
+          <DataTable loading={loading} rows={visible} empty={<EmptyState title="No subscription records" body="Subscriptions will appear here after an approved organisation receives a trial or a verified subscription assignment." />} cols={[
+            { key: 'organisation', header: 'Organisation', mobile: 'title', render: (r) => <div><div className="font-medium">{r.organisation?.name ?? 'Unknown organisation'}</div><div className="text-xs text-ng-mute">{r.organisation?.industry?.name ?? 'Industry unavailable'}</div></div> },
+            { key: 'plan', header: 'Plan', render: (r) => <div><div className="font-medium">{r.plan?.name ?? 'Plan unavailable'}</div><div className="text-xs text-ng-mute">{r.plan?.key ?? ''}</div></div> },
+            { key: 'status', header: 'Status', render: (r) => <Status value={r.status} /> },
+            { key: 'period_end', header: 'Period ends', render: (r) => new Date(r.period_end).toLocaleDateString() },
+            { key: 'price', header: 'Monthly price', render: (r) => r.plan ? inr(r.plan.price_inr_monthly) : '—' },
+          ]} />
+        )}
+      </Card>
+      <p className="mt-3 text-xs text-ng-mute">This screen is read-only. It does not activate paid plans, charge customers, extend subscriptions or alter entitlements. Use a verified payment workflow before enabling paid activation.</p>
     </>
   )
 }
