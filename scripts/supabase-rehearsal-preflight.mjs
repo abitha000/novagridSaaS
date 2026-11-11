@@ -26,9 +26,9 @@ async function request(path, headers, options={}) {
   return body ? JSON.parse(body) : null;
 }
 
-await check("NOVAGRID schema version is 10", async () => {
+await check("NOVAGRID schema version is 11", async () => {
   const version = await request("/rest/v1/rpc/novagrid_schema_version", anonHeaders, {method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
-  if (Number(version) !== 10) throw new Error(`Expected schema version 10, received ${JSON.stringify(version)}`);
+  if (Number(version) !== 11) throw new Error(`Expected schema version 11, received ${JSON.stringify(version)}`);
   return `schema version ${version}`;
 });
 
