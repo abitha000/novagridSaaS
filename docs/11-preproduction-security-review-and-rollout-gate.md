@@ -26,7 +26,7 @@ These latest edits require a fresh green GitHub Actions run. The earlier green r
 
 ## Security review gates
 
-1. Re-run GitHub Actions on the latest branch head; all nine migrations and smoke tests must pass.
+1. Re-run GitHub Actions on the latest branch head; all ten migrations and smoke tests must pass.
 2. Expand automated tests for:
    - tenant A cannot read/write tenant B records;
    - wrong-tenant role assignment is rejected;
@@ -50,7 +50,7 @@ These latest edits require a fresh green GitHub Actions run. The earlier green r
 1. Obtain a fresh green CI run on the final commit.
 2. Take a Supabase backup and export current schema.
 3. Apply only `supabase/migrations/*.sql` sequentially using the migration runner; never apply `supabase/proposed-migrations/`.
-4. Verify migration history and schema version 9, RLS/force-RLS on every NOVAGRID table, grants, functions and triggers.
+4. Verify migration history and schema version 10, RLS/force-RLS on every NOVAGRID table, grants, functions and triggers.
 5. Run Supabase Security, Performance and Health Advisors; resolve all NOVAGRID findings.
 6. Bootstrap the first platform super-admin through a secure one-time procedure; verify the admin can sign in and no tenant can impersonate platform roles.
 7. Connect the app and verify registration, approval, subscription assignment, staff invitations, contact CRUD and tenant isolation with two test organisations.
@@ -58,7 +58,7 @@ These latest edits require a fresh green GitHub Actions run. The earlier green r
 
 ## Known product limitations
 
-- Subscription prices in seed data are samples, not approved commercial pricing.
+- Gym and Education launch prices in migration 0010 are proposed commercial rates and require validation before real billing.
 - No payment gateway activation/webhook flow is implemented yet.
 - No notification provider dispatcher or webhook handler is implemented yet.
 - Gym and Education domain-specific tables/flows are not part of these nine core migrations.
