@@ -277,3 +277,76 @@ export function LiveGymAttendance({ tenantId }: { tenantId: string }) {
     </Card>
   </>
 }
+
+
+/* ---------------- Gym renewals (live) ---------------- */
+export function LiveGymRenewals({ tenantId }: { tenantId: string }) {
+  const toast = useToast()
+  const [rows, setRows] = useState<GymMembership[] | null>(null)
+  const [query, setQuery] = useState('')
+  const [range, setRange] = useState('all')
+  const [renewing, setRenewing] = useState<GymMembership | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [price, setPrice] = useState('1800')
+  const [days, setDays] = useState('30')
+  const [error, setError] = useState<unknown>(null)
+  const today = new Date().toISOString().slice(0,10)
+  const load = useCallback(async () => {
+    setError(null)
+    try { setRows(await listGymMemberships(tenantId)) }
+    catch (e) { setError(e); setRows([]) }
+  }, [tenantId])
+  useEffect(() => { void load() }, [load])
+  const daysLeft = (date:string) => Math.ceil((new Date(date+'T00:00:00').getTime()-new Date(today+'T00:00:00').getTime())/86400000)
+  const relevant = (rows ?? []).filter(r => r.status === 'active' && daysLeft(r.end_date) <= 30)
+  const expired = relevant.filter(r => daysLeft(r.end_date) < 0).length
+  const dueSoon = relevant.filter(r => daysLeft(r.end_date) >= 0).length
+  const filtered = relevant.filter(r => {
+    const left = daysLeft(r.end_date)
+    return (range === 'all' || (range === 'expired' ? left < 0 : range === 'today' ? left === 0 : left >= 0 && left <= 30))
+      && [r.contact?.full_name ?? '', r.plan_name, r.contact?.phone_e164 ?? ''].some(v => v.toLowerCase().includes(query.toLowerCase()))
+  })
+  const beginRenewal = (r:GymMembership) => { setRenewing(r); setPrice((r.amount_paise/100).toFixed(2).replace(/\\.00$/,'')); setDays('30') }
+  const renew = async () => {
+    if (!renewing) return
+    const start = renewing.end_date >= today ? new Date(new Date(renewing.end_date+'T00:00:00').getTime()+86400000) : new Date(today+'T00:00:00')
+    const end = new Date(start.getTime()+Number(days)*86400000-86400000)
+    setBusy(true)
+    try {
+      await createGymMembership(tenantId,{contact_id:renewing.contact_id,plan_name:renewing.plan_name,start_date:start.toISOString().slice(0,10),end_date:end.toISOString().slice(0,10),amount_paise:Math.round(Number(price)*100),notes:'Renewal of membership '+renewing.id})
+      toast('Renewal recorded as a new membership')
+      setRenewing(null)
+      await load()
+    } catch(e) { toast(errorMessage(e),'err') } finally { setBusy(false) }
+  }
+  const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n/100)
+  return <>
+    <PageHeader title="Membership renewals" sub="Live memberships expiring within 30 days or already expired." actions={<Button variant="secondary" icon={<I.RefreshCw size={16}/>} onClick={()=>void load()}>Refresh</Button>}/>
+    <SchemaNote e={error}/>
+    <div className="grid sm:grid-cols-3 gap-4 mb-4">
+      <Stat label="Due within 30 days" value={String(dueSoon)} icon={<I.CalendarClock size={18}/>}/>
+      <Stat label="Expired" value={String(expired)} icon={<I.CalendarX size={18}/>}/>
+      <Stat label="Renewal opportunities" value={String(relevant.length)} icon={<I.RefreshCw size={18}/>}/>
+    </div>
+    <Card>
+      <div className="p-4 border-b border-ng-line flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SearchBox value={query} onChange={setQuery} placeholder="Search member or plan" className="sm:w-72"/>
+        <Tabs value={range} onChange={setRange} tabs={[{id:'all',label:'All due'},{id:'expired',label:'Expired',count:expired},{id:'today',label:'Due today'},{id:'soon',label:'Next 30 days',count:dueSoon}]}/>
+      </div>
+      {error && !(error instanceof BackendError && error.kind==='schema_missing') ? <ErrorState onRetry={()=>void load()} body={errorMessage(error)}/> :
+      <DataTable loading={rows===null} rows={filtered} empty={<EmptyState title="No renewals due" body="No active memberships are expiring within the next 30 days."/>} cols={[
+        {key:'member',header:'Member',mobile:'title',render:r=><div className="flex items-center gap-3"><Avatar name={r.contact?.full_name ?? 'Member'}/><div><div className="font-medium">{r.contact?.full_name ?? 'Member'}</div><div className="text-xs text-ng-mute">{r.contact?.phone_e164 ?? r.contact?.email ?? '—'}</div></div></div>},
+        {key:'plan',header:'Plan',render:r=><div><div className="font-medium">{r.plan_name}</div><div className="text-xs text-ng-mute">{money(r.amount_paise)}</div></div>},
+        {key:'expiry',header:'Expires',render:r=><div><div>{new Date(r.end_date+'T00:00:00').toLocaleDateString('en-IN')}</div><div className="text-xs text-ng-mute">{daysLeft(r.end_date)<0?Math.abs(daysLeft(r.end_date))+' days overdue':daysLeft(r.end_date)===0?'Due today':daysLeft(r.end_date)+' days left'}</div></div>},
+        {key:'renew',header:'',mobile:'hide',render:r=><Button size="sm" onClick={()=>beginRenewal(r)}>Renew</Button>},
+      ]}/>}
+    </Card>
+    <Modal open={!!renewing} onClose={()=>setRenewing(null)} title={'Renew '+(renewing?.contact?.full_name ?? 'membership')} footer={<><Button variant="secondary" onClick={()=>setRenewing(null)}>Cancel</Button><Button loading={busy} disabled={!/^\\d+(\\.\\d{1,2})?$/.test(price)||Number(price)<0||!['30','90','180','365'].includes(days)} onClick={()=>void renew()}>Record renewal</Button></>}>
+      <div className="space-y-4">
+        <Field label="Renewal duration"><Select value={days} onChange={e=>setDays(e.target.value)}><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option></Select></Field>
+        <Field label="Renewal amount (INR)"><Input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)}/></Field>
+        <p className="text-xs text-ng-mute">A new membership record is created. The previous record is preserved. No payment is collected and no reminder is sent.</p>
+      </div>
+    </Modal>
+  </>
+}
