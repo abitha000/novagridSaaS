@@ -1,3 +1,6 @@
+-- Increase only the disposable fixture plan so RBAC tests are not testing quota exhaustion.
+update public.subscription_plans set limits=jsonb_set(limits,'{staff}','10'::jsonb) where key='gym_starter';
+
 -- Disposable local Supabase staff RBAC fixtures. Never run against hosted production.
 insert into public.tenant_users(tenant_id,user_id,role_id,full_name,email,status)
 select '21000000-0000-0000-0000-000000000001', :'operator_id'::uuid, r.id,
