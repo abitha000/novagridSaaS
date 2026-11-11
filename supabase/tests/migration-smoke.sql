@@ -32,7 +32,7 @@ do $$
 declare v int; r record;
 begin
   select public.novagrid_schema_version() into v;
-  if v <> 9 then raise exception 'schema version expected 9, got %', v; end if;
+  if v <> 10 then raise exception 'schema version expected 10, got %', v; end if;
   if (select count(*) from public.industry_categories) < 10 then raise exception 'industry seeds missing'; end if;
   if (select count(*) from public.roles where tenant_id is null) < 6 then raise exception 'system roles missing'; end if;
   for r in select tablename from pg_tables where schemaname='public' and tablename <> 'kv_store_5a875bd1' loop
@@ -113,5 +113,30 @@ begin
     where m.scope='industry' and m.industry_category_id=v_edu and m.key like 'gym.%'
   ) then raise exception 'gym module incorrectly assigned to education'; end if;
 end $$;
+
+
+-- Pricing catalogue must contain three plans per launch industry with correct scope and prices.
+do $
+begin
+  if (select count(*) from public.subscription_plans where active and industry_category_id is not null and key like 'gym_%') <> 3 then
+    raise exception 'expected three active Gym plans';
+  end if;
+  if (select count(*) from public.subscription_plans where active and industry_category_id is not null and key like 'education_%') <> 3 then
+    raise exception 'expected three active Education plans';
+  end if;
+  if exists (
+    select 1 from public.plan_entitlements pe
+    join public.subscription_plans p on p.id = pe.plan_id
+    join public.module_catalogue m on m.id = pe.module_id
+    where (p.industry_category_id is not null and m.scope = 'industry')
+      and p.industry_category_id <> m.industry_category_id
+  ) then raise exception 'cross-industry plan entitlement found'; end if;
+  if not exists (select 1 from public.subscription_plans where key='gym_starter' and price_inr_monthly=799 and limits->>'active_members'='100') then
+    raise exception 'Gym Starter pricing or capacity mismatch';
+  end if;
+  if not exists (select 1 from public.subscription_plans where key='education_growth' and price_inr_monthly=2999 and limits->>'active_students'='750') then
+    raise exception 'Education Growth pricing or capacity mismatch';
+  end if;
+end $;
 
 select 'NOVAGRID migration and security smoke tests passed' as result;
