@@ -18,6 +18,8 @@
 6. `20261110110500_novagrid_notifications.sql`
 7. `20261110110600_novagrid_audit_triggers.sql`
 8. `20261110110700_novagrid_seed_reference_data.sql`
+9. `20261110110800_harden_legacy_rls_auto_enable.sql`
+10. `20261111120000_novagrid_industry_pricing.sql`
 
 ## Before applying to production
 
@@ -57,3 +59,23 @@ Use `--dry-run` only if supported by the installed CLI version. Check the curren
 ## Known limitations / follow-up migrations
 
 These migrations establish the control plane, tenant core, security policies, consent ledger, and notification persistence. They do not implement provider dispatch, WhatsApp/SMS/email webhooks, payment gateway integration, subscription lifecycle jobs, quota enforcement, storage documents, or Gym/Education domain tables. Those remain later phases. The invitation Edge Function is still a draft and must be reviewed, secured, and tested before deployment.
+
+
+## Initial commercial pricing catalogue (migration 0010)
+
+The initial proposed India launch prices are stored in `subscription_plans`, not hard-coded as billing authority in the frontend:
+
+| Industry | Plan | Monthly | Annual (10 months) | Capacity |
+|---|---|---:|---:|---:|
+| Gym | Starter | ₹799 | ₹7,990 | 100 active members, 2 staff |
+| Gym | Growth | ₹1,499 | ₹14,990 | 300 active members, 5 staff |
+| Gym | Pro | ₹2,499 | ₹24,990 | 1,000 active members, 15 staff |
+| Education | Starter | ₹1,499 | ₹14,990 | 200 active students, 5 staff |
+| Education | Growth | ₹2,999 | ₹29,990 | 750 active students, 15 staff |
+| Education | Pro | ₹5,999 | ₹59,990 | 2,000 active students, 40 staff |
+
+Annual rates are set to ten monthly payments (two months' discount). These are launch proposals and must be commercially validated before accepting real payments.
+
+Add-ons are catalogued in `subscription_addon_catalogue`. WhatsApp/SMS carrier and Meta charges are not included in subscription prices and must be passed through as metered messaging usage. Do not promise unlimited messaging. Add-on catalogue access must be exposed only through trusted platform APIs after authorization.
+
+Migration 0010 deactivates the old generic sample plans for new selection, but does not delete existing subscriptions or historical plan rows. Existing subscription references remain valid.
