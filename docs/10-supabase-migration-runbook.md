@@ -3,7 +3,7 @@
 ## Current state
 
 - Repository branch: `fix/initial-supabase-migrations`
-- The eight reviewed, ordered migrations are in `supabase/migrations/` and are now in the standard Supabase CLI migration directory.
+- The ordered NOVAGRID migrations are in `supabase/migrations/` and are now in the standard Supabase CLI migration directory.
 - The original `supabase/proposed-migrations/` files are retained as historical drafts; do not apply those.
 - The existing Supabase project currently has only the Figma KV scaffold migration/table. These NOVAGRID migrations have **not** been applied to the live project.
 - The KV scaffold is intentionally left untouched.
@@ -45,7 +45,7 @@ Use `--dry-run` only if supported by the installed CLI version. Check the curren
 
 ## Required verification
 
-- `public.novagrid_schema_version()` returns `8`.
+- `public.novagrid_schema_version()` returns `10`.
 - All NOVAGRID tables have RLS enabled and forced.
 - A user in tenant A cannot read, insert, update, or reference tenant B's records.
 - A tenant cannot assign a role created by another tenant.
