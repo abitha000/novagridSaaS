@@ -20,15 +20,18 @@
 8. `20261110110700_novagrid_seed_reference_data.sql`
 9. `20261110110800_harden_legacy_rls_auto_enable.sql`
 10. `20261111120000_novagrid_industry_pricing.sql`
+11. `20261111133000_enforce_subscription_capacity.sql`
+12. `20261111140000_enforce_monthly_message_quota.sql`
+13. `20261111150000_enforce_tenant_storage_quota.sql`
 
 ## Before applying to production
 
-1. Create a Supabase staging project or database branch and apply the migrations there first.
+1. Run the PostgreSQL 17 GitHub Actions migration and smoke-test workflow; it uses an ephemeral database at no additional cost. This is not a full Supabase emulator.
 2. Review the generated schema and run the RLS isolation tests (see below). The repo's original proposed migrations are not a substitute for tests.
 3. Confirm `private` is not an exposed PostgREST schema. The frontend must use only the anon/publishable key; never put the service-role key in Vite variables.
 4. Confirm the first platform administrator is created deliberately through a trusted admin-only operation. Do not expose a public signup path for platform admins.
-5. Gym and Education launch prices in migration 0010 are proposed rates (`is_sample = false`), and must be commercially validated before accepting real payments.
-6. Only after staging passes, take a backup and apply to production in order.
+5. Gym and Education launch prices in migration 0010 are proposed rates and must be commercially validated before accepting real payments.
+6. Only after all review gates pass, take a verified backup and apply migrations to production in order.
 
 ## CLI workflow
 
@@ -58,7 +61,7 @@ Use `--dry-run` only if supported by the installed CLI version. Check the curren
 
 ## Known limitations / follow-up migrations
 
-These migrations establish the control plane, tenant core, security policies, consent ledger, notification persistence, and proposed Gym/Education pricing catalogue. They do not implement provider dispatch, WhatsApp/SMS/email webhooks, payment gateway integration, subscription lifecycle jobs, quota enforcement, storage documents, or Gym/Education domain tables. Those remain later phases. The invitation Edge Function is still a draft and must be reviewed, secured, and tested before deployment.
+These migrations establish the control plane, tenant core, security policies, consent ledger, notification persistence, and proposed Gym/Education pricing catalogue. They do not implement provider dispatch, WhatsApp/SMS/email webhooks, payment gateway integration, subscription lifecycle jobs, Gym/Education domain tables. Subscription capacity, monthly messaging quota, and private tenant storage quota enforcement are now included in later migrations. The browser Storage client must use the private `novagrid-files` bucket and paths beginning with `<organisation-uuid>/`; do not create public URLs. Those remain later phases. The invitation Edge Function is still a draft and must be reviewed, secured, and tested before deployment.
 
 
 ## Initial commercial pricing catalogue (migration 0010)
