@@ -79,7 +79,7 @@ begin
     end if;
   elsif tg_table_name = 'contacts' then
     if new.deleted_at is null and new.status = 'active'
-      and (tg_op = 'INSERT' or old.deleted_at is not null or old.status <> 'active') then
+      and (tg_op = 'INSERT' or old.deleted_at is not null or old.status <> 'active' or old.type is distinct from new.type) then
       select count(*) into current_count from public.contacts
       where tenant_id = tenant and deleted_at is null and status = 'active'
         and (case when industry_key = 'gym' then type = 'member'
