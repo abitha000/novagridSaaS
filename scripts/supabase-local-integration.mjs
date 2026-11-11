@@ -56,6 +56,13 @@ await storageUpload(tokenA,"21000000-0000-0000-0000-000000000001","tenant-a.txt"
 await storageUpload(tokenA,"21000000-0000-0000-0000-000000000002","cross-tenant.txt",false);
 console.log("PASS Storage API: tenant A can upload its own file and cannot upload into tenant B");
 
-const cleanup=await call("/auth/v1/admin/users/"+users[0],{method:"DELETE"}).catch(()=>null);
-await call("/auth/v1/admin/users/"+users[1],{method:"DELETE"}).catch(()=>null);
-console.log("PASS cleanup: disposable Auth users removed");
+const cleanup=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-c",`
+  delete from public.organisations where id in (
+    '21000000-0000-0000-0000-000000000001',
+    '21000000-0000-0000-0000-000000000002'
+  );
+`],{encoding:"utf8"});
+if(cleanup.status!==0) throw new Error(cleanup.stderr||"fixture cleanup failed");
+await call("/auth/v1/admin/users/"+users[0],{method:"DELETE"});
+await call("/auth/v1/admin/users/"+users[1],{method:"DELETE"});
+console.log("PASS cleanup: disposable tenant fixtures and Auth users removed");
