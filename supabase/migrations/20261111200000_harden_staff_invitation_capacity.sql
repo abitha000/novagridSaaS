@@ -1,3 +1,5 @@
+create or replace function public.novagrid_schema_version() returns integer language sql stable set search_path = '' as $$ select 11 $$;
+
 -- Staff invitations must reserve seats before the invitee accepts.
 -- Keep active and pending invitations within the same subscription capacity.
 create or replace function private.enforce_staff_invitation_capacity()
