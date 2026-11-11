@@ -26,10 +26,10 @@ join public.subscription_plans p on p.key = case c.key
   when 'education' then 'education_starter'
 end and p.industry_category_id=o.industry_category_id;
 
-insert into public.contacts (tenant_id,full_name)
+insert into public.contacts (tenant_id,full_name,type)
 values
- ('20000000-0000-0000-0000-000000000001','Contact A'),
- ('20000000-0000-0000-0000-000000000002','Contact B');
+ ('20000000-0000-0000-0000-000000000001','Contact A','member'),
+ ('20000000-0000-0000-0000-000000000002','Contact B','student');
 
 -- Structural assertions: final schema version, reference seeds, RLS + FORCE RLS.
 do $$
