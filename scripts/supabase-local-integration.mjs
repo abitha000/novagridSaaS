@@ -151,6 +151,11 @@ console.log("PASS E2E: platform admin separately assigned trial subscription");
    if(!response.ok)throw new Error("Staff update failed: "+raw.slice(0,300));
    return data;
  };
+ const expectOwnerPromotionDenied=async(token,id)=>{
+   try { await staffPatch(token,id,{role_id:ownerRoleRows[0].id}); }
+   catch(error) { assert(String(error).includes("only an owner can change owner assignments"),"Owner-role promotion failed for an unexpected reason"); return; }
+   throw new Error("Non-owner unexpectedly promoted itself to owner");
+ };
  const operatorUpdate=await staffPatch(operatorToken,targetMembershipId,{status:"active"});
  assert(Array.isArray(operatorUpdate)&&operatorUpdate.length===0,"Operator without staff.manage changed another staff member");
  const operatorSelf=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${operatorId}&select=id`,{headers:{apikey:anon,Authorization:`Bearer ${operatorToken}`}});
@@ -159,14 +164,12 @@ console.log("PASS E2E: platform admin separately assigned trial subscription");
  const ownerRoleResponse=await fetch(base+"/rest/v1/roles?tenant_id=is.null&key=eq.owner&select=id",{headers:{apikey:anon,Authorization:`Bearer ${ownerToken}`}});
  const ownerRoleRows=await ownerRoleResponse.json();
  assert(ownerRoleResponse.ok&&ownerRoleRows.length===1,"System owner role not available");
- const promote=await staffPatch(operatorToken,operatorRows[0].id,{role_id:ownerRoleRows[0].id});
- assert(Array.isArray(promote)&&promote.length===0,"Operator unexpectedly promoted itself");
+ await expectOwnerPromotionDenied(operatorToken,operatorRows[0].id);
  const staffAdminToken=await loginAs("staff-admin@novagrid.test");
  const adminSelf=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${adminStaffId}&select=id`,{headers:{apikey:anon,Authorization:`Bearer ${staffAdminToken}`}});
  const adminRows=await adminSelf.json();
  assert(adminSelf.ok&&adminRows.length===1,"Admin staff membership was not visible");
- const adminPromotion=await staffPatch(staffAdminToken,adminRows[0].id,{role_id:ownerRoleRows[0].id});
- assert(Array.isArray(adminPromotion)&&adminPromotion.length===0,"Admin unexpectedly promoted itself to owner");
+ await expectOwnerPromotionDenied(staffAdminToken,adminRows[0].id);
  const ownerUpdate=await staffPatch(tokenA,targetMembershipId,{status:"active"});
  assert(Array.isArray(ownerUpdate)&&ownerUpdate.length===1&&ownerUpdate[0].status==="active","Owner could not activate invited staff");
  console.log("PASS Staff RBAC: operator cannot manage staff; admin cannot promote itself to owner");
