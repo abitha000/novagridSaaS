@@ -63,6 +63,47 @@ begin
 end $$;
 reset role;
 
+-- A tenant owner must not be able to use platform-only approval or subscription RPCs.
+set role authenticated;
+set request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+do $platform_guard$
+begin
+  begin
+    perform public.decide_organisation_approval(
+      '20000000-0000-0000-0000-000000000002', 'reject', null, 'test'
+    );
+    raise exception 'tenant user unexpectedly called platform approval RPC';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.set_organisation_suspension(
+      '20000000-0000-0000-0000-000000000002', true, 'test'
+    );
+    raise exception 'tenant user unexpectedly called platform suspension RPC';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.assign_subscription(
+      '20000000-0000-0000-0000-000000000002', 'education_starter', 'active', now()+interval '30 days'
+    );
+    raise exception 'tenant user unexpectedly assigned a subscription';
+  exception when insufficient_privilege then null;
+  end;
+end
+$platform_guard$;
+reset role;
+
+-- SECURITY DEFINER legacy helper must not be directly executable by API roles.
+do $rpc_grants$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null
+    and (has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE')
+      or has_function_privilege('authenticated', 'public.rls_auto_enable()', 'EXECUTE')) then
+    raise exception 'legacy SECURITY DEFINER helper remains executable by API roles';
+  end if;
+end
+$rpc_grants$;
+
 -- Trigger-level invariants: tenant-owned roles cannot be moved and cannot be assigned across tenants.
 insert into public.roles (tenant_id,key,name,is_system)
 values ('20000000-0000-0000-0000-000000000001','custom_test','Tenant A custom',false);
