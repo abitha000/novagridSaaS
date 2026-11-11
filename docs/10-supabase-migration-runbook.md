@@ -23,6 +23,9 @@
 11. `20261111133000_enforce_subscription_capacity.sql`
 12. `20261111140000_enforce_monthly_message_quota.sql`
 13. `20261111150000_enforce_tenant_storage_quota.sql`
+14. `20261111160000_harden_tenant_storage_mutations.sql`
+
+The list above contains 14 NOVAGRID migrations in timestamp order. The pre-existing Figma KV scaffold migration is separate and must be preserved. See [the live project preflight audit](13-live-supabase-preflight-audit.md) for the currently verified live migration ledger and rollout blockers.
 
 ## Before applying to production
 
