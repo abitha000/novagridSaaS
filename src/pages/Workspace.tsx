@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth, useLiveTenant } from '../lib/auth'
-import { LivePeople, LiveStaff } from './LiveData'
+import { LivePayments, LivePeople, LiveStaff } from './LiveData'
 import { busStops, inr, members, students } from '../data'
 import { AreaChart, Avatar, Badge, BarChart, Button, Card, CardHeader, Chips, DataTable, Donut, Dropdown, EmptyState, Field, Input, Logo, Modal, PageHeader, SearchBox, Select, Skel, Stat, Status, Tabs, Toggle, cx, useFakeLoad, useToast } from '../ui'
 
@@ -259,17 +259,17 @@ function RenewalsPage({ ind }: { ind: Ind }) {
 
 /* ---------- Payments / Reports / Automation / Settings ---------- */
 export function PaymentsPage() {
+  const tenantId = useLiveTenant()
+  if (tenantId) return <LivePayments tenantId={tenantId} />
   const [tab, setTab] = useState('all')
   const all = [{ id: 1, n: 'Diya Sharma', a: inr(5400), m: 'UPI', s: 'Paid', d: 'Today' }, { id: 2, n: 'Rohit Bansal', a: inr(42500), m: 'Bank transfer', s: 'Due', d: '28 May' }, { id: 3, n: 'Yash Malhotra', a: inr(42500), m: '—', s: 'Overdue', d: '10 May' }, { id: 4, n: 'Aarav Kapoor', a: inr(16000), m: 'Card', s: 'Paid', d: 'Yesterday' }]
   const rows = all.filter((r) => tab === 'all' || r.s.toLowerCase() === tab)
-  return (
-    <>
-      <PageHeader title="Payments" sub="Payment status comes from verified gateway events or manual entries marked as such." actions={<Button icon={<I.Plus size={16} />}>Record payment</Button>} />
-      <div className="grid sm:grid-cols-3 gap-4 mb-4"><Stat label="Collected" value="₹4.2L" delta="+9%" icon={<I.CircleCheck size={18} />} /><Stat label="Pending" value="₹1.1L" icon={<I.Clock size={18} />} /><Stat label="Overdue" value="₹42.5K" icon={<I.TriangleAlert size={18} />} /></div>
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'all', label: 'All' }, { id: 'paid', label: 'Paid' }, { id: 'due', label: 'Due' }, { id: 'overdue', label: 'Overdue' }]} />
-      <Card className="mt-5"><DataTable rows={rows} cols={[{ key: 'n', header: 'Person', mobile: 'title', render: (r) => <span className="font-medium">{r.n}</span> }, { key: 'a', header: 'Amount' }, { key: 'm', header: 'Method' }, { key: 'd', header: 'Date' }, { key: 's', header: 'Status', render: (r) => <Status value={r.s} /> }]} /></Card>
-    </>
-  )
+  return <>
+    <PageHeader title="Payments" sub="Demo data · live payment records require the approved database migration." />
+    <div className="grid sm:grid-cols-3 gap-4 mb-4"><Stat label="Collected" value="₹4.2L" icon={<I.CircleCheck size={18}/>} /><Stat label="Pending" value="₹1.1L" icon={<I.Clock size={18}/>} /><Stat label="Overdue" value="₹42.5K" icon={<I.TriangleAlert size={18}/>} /></div>
+    <Tabs value={tab} onChange={setTab} tabs={[{ id:'all',label:'All'},{id:'paid',label:'Paid'},{id:'due',label:'Due'},{id:'overdue',label:'Overdue'}]}/>
+    <Card className="mt-5"><DataTable rows={rows} cols={[{key:'n',header:'Person',mobile:'title',render:r=><span className="font-medium">{r.n}</span>},{key:'a',header:'Amount'},{key:'m',header:'Method'},{key:'d',header:'Date'},{key:'s',header:'Status',render:r=><Status value={r.s}/>}]} /></Card>
+  </>
 }
 export function ReportsPage() {
   const toast = useToast()
