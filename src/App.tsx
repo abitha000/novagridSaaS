@@ -45,10 +45,11 @@ function Gate({ kind, ind, children }: { kind: 'platform' | 'app'; ind?: string;
   if (kind === 'platform') {
     return a.platformRole ? <>{children}</> : <Splash><EmptyState title="Platform access required" body="This area is for NOVAGRID platform administrators." action={<Button onClick={() => go(a.homePath())}>Go to my workspace</Button>} /></Splash>
   }
-  if (!ws?.organisation) return <Splash><EmptyState title="No organisation yet" body="Register an organisation, or ask an owner to invite you." action={<Button onClick={() => go('/register')}>Register an organisation</Button>} /></Splash>
+  if (!ws?.organisation) return <Splash><EmptyState title="No organisation yet" body="Your account has no active organisation membership. If you just confirmed your email, check registration setup or contact NOVAGRID support." action={<><Button onClick={() => go('/register/complete')}>Check registration status</Button><Button variant="secondary" onClick={async () => { await a.signOut(); go('/login') }}>Sign out</Button></>} /></Splash>
+  if (ws.organisation.lifecycle_status === 'suspended') return <Splash><EmptyState title="Organisation suspended" body={`${ws.organisation.name} is currently suspended. Workspace access is unavailable; contact NOVAGRID support or your platform administrator.`} action={<><Button onClick={() => go('/register/complete')}>View organisation status</Button><Button variant="secondary" onClick={async () => { await a.signOut(); go('/login') }}>Sign out</Button></>} /></Splash>
   if (ws.organisation.approval_status !== 'approved') {
     const rejected = ws.organisation.approval_status === 'rejected'
-    return <Splash><EmptyState title={rejected ? 'Registration not approved' : 'Awaiting category approval'} body={rejected ? 'Contact NOVAGRID support for details.' : `${ws.organisation.name} is waiting for the NOVAGRID team to approve its industry category. Business modules unlock after approval and subscription activation.`} action={<Button variant="secondary" onClick={async () => { await a.signOut(); go('/login') }}>Sign out</Button>} /></Splash>
+    return <Splash><EmptyState title={rejected ? 'Registration not approved' : 'Awaiting category approval'} body={rejected ? `${ws.organisation.name} was not approved. View the registration status page for next steps, or contact NOVAGRID support.` : `${ws.organisation.name} is waiting for the NOVAGRID team to approve its industry category. Business modules unlock after approval and subscription activation.`} action={<><Button onClick={() => go('/register/complete')}>View registration status</Button><Button variant="secondary" onClick={async () => { await a.signOut(); go('/login') }}>Sign out</Button></>} /></Splash>
   }
   return <>{children}</>
 }
