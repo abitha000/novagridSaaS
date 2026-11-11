@@ -16,10 +16,11 @@ export function BillingPage({ ind }: { ind: 'gym' | 'education' }) {
   const [yearly, setYearly] = useState(true)
   const [pick, setPick] = useState<string | null>(null)
   const [addons, setAddons] = useState<Record<string, boolean>>({ wl: false, msg: true, st: false })
-  const tiers = industryPlanTiers[ind]\n  const current = ind === 'gym' ? 'gym_growth' : 'education_growth'
+  const tiers = industryPlanTiers[ind]
+  const current = ind === 'gym' ? 'gym_growth' : 'education_growth'
   return (
     <>
-      <PageHeader title="Subscription & billing" sub="All prices on this screen are sample values for design review." />
+      <PageHeader title="Subscription & billing" sub="Manage your industry plan, capacity and add-ons. Messaging delivery is billed separately." />
       <Tabs value={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'plans', label: 'Plans' }, { id: 'usage', label: 'Usage & add-ons' }, { id: 'invoices', label: 'Invoices & payments' }]} />
       <div key={tab} className="mt-6 animate-fade">
         {tab === 'overview' && (
