@@ -128,7 +128,9 @@ console.log("PASS E2E: platform admin separately assigned trial subscription");
  assert(operatorId&&targetId&&adminStaffId,"Staff integration users were not created");
  const staffFixtures=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-v",`operator_id=${operatorId}`,"-v",`target_id=${targetId}`,"-v",`admin_id=${adminStaffId}`,"-f","supabase/tests/staff-rbac-fixtures.sql"],{encoding:"utf8"});
  if(staffFixtures.status!==0)throw new Error(staffFixtures.stderr||"Staff RBAC fixtures failed");
- const crossTenantRole=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-v",`target_id=${targetId}`,"-c",`insert into public.tenant_users(tenant_id,user_id,role_id,full_name,email,status) select '21000000-0000-0000-0000-000000000002', :'target_id'::uuid, r.id, 'Cross Tenant', 'cross-tenant@novagrid.test', 'invited' from public.roles r where r.tenant_id='21000000-0000-0000-0000-000000000001' and r.key='tenant_custom';`],{encoding:"utf8"});
+ assert(/^[0-9a-f-]{36}$/i.test(targetId),"Invalid generated staff target UUID");
+ const crossTenantSql=`insert into public.tenant_users(tenant_id,user_id,role_id,full_name,email,status) select '21000000-0000-0000-0000-000000000002', '${targetId}'::uuid, r.id, 'Cross Tenant', 'cross-tenant@novagrid.test', 'invited' from public.roles r where r.tenant_id='21000000-0000-0000-0000-000000000001' and r.key='tenant_custom';`;
+ const crossTenantRole=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-c",crossTenantSql],{encoding:"utf8"});
  assert(crossTenantRole.status!==0&&String(crossTenantRole.stderr).includes("staff role belongs to a different organisation"),"Cross-tenant role assignment was not rejected by the database");
 
  const operatorToken=await loginAs("staff-operator@novagrid.test");
