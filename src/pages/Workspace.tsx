@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth, useLiveTenant } from '../lib/auth'
-import { LivePayments, LivePeople, LiveStaff } from './LiveData'
+import { LiveGymMembers, LivePayments, LivePeople, LiveStaff } from './LiveData'
 import { listPayments, type PaymentRecord } from '../lib/api/payments'
 import { listNotifications, listRecipients } from '../lib/api/notifications'
 import type { NotificationRow, RecipientRow } from '../lib/api/types'
@@ -225,10 +225,12 @@ export function TransportPage({ ind }: { ind: Ind }) {
 
 export function ModulePage({ ind, k }: { ind: Ind; k: string }) {
   const toast = useToast()
+  const liveTenant = useLiveTenant()
   const add = <Button icon={<I.Plus size={16} />} onClick={() => toast('Create form opened (prototype)', 'info')}>Add</Button>
   if (k === 'attendance') return <AttendancePage ind={ind} />
   if (k === 'timetables') return <TimetablePage />
   if (k === 'transport') return <TransportPage ind={ind} />
+  if (k === 'members' && ind === 'gym' && liveTenant) return <LiveGymMembers key={liveTenant} tenantId={liveTenant} />
   if (k === 'members') return <Simple title="Members" sub="1,240 active members" action={add} rows={members} cols={[{ key: 'name', header: 'Member', mobile: 'title', render: (r: (typeof members)[0]) => <div className="flex items-center gap-3"><Avatar name={r.name} /><span className="font-medium">{r.name}</span></div> }, { key: 'plan', header: 'Plan' }, { key: 'trainer', header: 'Trainer' }, { key: 'expiry', header: 'Expires' }, { key: 'status', header: 'Status', render: (r: (typeof members)[0]) => <Status value={r.status} /> }]} />
   if (k === 'memberships') return <Simple title="Membership plans" sub="Sample prices" action={add} rows={[{ id: 1, n: 'Monthly', p: inr(1800), d: '30 days', m: 412 }, { id: 2, n: 'Quarterly Pro', p: inr(4800), d: '90 days', m: 388 }, { id: 3, n: 'Annual Elite', p: inr(16000), d: '365 days', m: 440 }]} cols={[{ key: 'n', header: 'Plan', mobile: 'title' }, { key: 'p', header: 'Price' }, { key: 'd', header: 'Duration' }, { key: 'm', header: 'Members' }]} />
   if (k === 'trainers') return <Simple title="Trainers" sub="4 trainers · 2 personal-training slots free today" action={add} rows={[{ id: 1, n: 'Neha Iyer', s: 'Strength & conditioning', c: 62 }, { id: 2, n: 'Karan Joshi', s: 'Yoga & mobility', c: 48 }, { id: 3, n: 'Samir Khan', s: 'Weight loss', c: 55 }]} cols={[{ key: 'n', header: 'Trainer', mobile: 'title', render: (r: { n: string }) => <div className="flex items-center gap-3"><Avatar name={r.n} /><span className="font-medium">{r.n}</span></div> }, { key: 's', header: 'Speciality' }, { key: 'c', header: 'Clients' }]} />
