@@ -1,7 +1,7 @@
 import type { ContactInput } from './api/contacts'
 
 export type CsvContactRow = ContactInput & { rowNumber: number; errors: string[] }
-const normalizeHeader = (value: string) => value.trim().toLowerCase().replace(/[\\s-]+/g, '_')
+const normalizeHeader = (value: string) => value.trim().toLowerCase().replace(/[\s-]+/g, '_')
 
 /** Small RFC-4180-style parser supporting quoted commas, escaped quotes and newlines. */
 export function parseCsv(source: string): string[][] {
@@ -31,7 +31,7 @@ export function parseCsv(source: string): string[][] {
 }
 
 export function parseContactsCsv(source: string): CsvContactRow[] {
-  const rows = parseCsv(source.replace(/^\\uFEFF/, ''))
+  const rows = parseCsv(source.replace(/^\uFEFF/, ''))
   if (rows.length < 2) throw new Error('CSV must include a header and at least one contact row.')
   const headers = rows[0].map(normalizeHeader)
   const nameIndex = headers.findIndex((h) => ['full_name', 'name', 'contact_name'].includes(h))
@@ -43,21 +43,21 @@ export function parseContactsCsv(source: string): CsvContactRow[] {
   return rows.slice(1).map((values, offset) => {
     const get = (i: number) => i < 0 ? '' : (values[i] ?? '').trim()
     const full_name = get(nameIndex)
-    const phone_e164 = get(phoneIndex).replace(/[\\s()-]/g, '')
+    const phone_e164 = get(phoneIndex).replace(/[\s()-]/g, '')
     const email = get(emailIndex)
     const errors: string[] = []
     if (full_name.length < 2) errors.push('Name must be at least 2 characters')
-    if (phone_e164 && !/^\\+[1-9]\\d{7,14}$/.test(phone_e164)) errors.push('Phone must use international format, e.g. +919876543210')
-    if (email && !/^\\S+@\\S+\\.\\S+$/.test(email)) errors.push('Email is invalid')
+    if (phone_e164 && !/^\+[1-9]\d{7,14}$/.test(phone_e164)) errors.push('Phone must use international format, e.g. +919876543210')
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) errors.push('Email is invalid')
     return { rowNumber: offset + 2, type: get(typeIndex) || 'person', full_name, phone_e164, email, errors }
   })
 }
 
 const csvCell = (value: unknown) => {
   const text = value == null ? '' : String(value)
-  return /[",\\r\\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text
+  return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text
 }
 export function contactsToCsv(rows: Array<{ full_name: string; type: string; phone_e164: string | null; email: string | null }>) {
   return [['full_name', 'type', 'phone_e164', 'email'], ...rows.map((r) => [r.full_name, r.type, r.phone_e164, r.email])]
-    .map((row) => row.map(csvCell).join(',')).join('\\r\\n')
+    .map((row) => row.map(csvCell).join(',')).join('\r\n')
 }
