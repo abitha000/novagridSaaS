@@ -27,6 +27,10 @@
 
 The list above contains 14 NOVAGRID migrations in timestamp order. The pre-existing Figma KV scaffold migration is separate and must be preserved. See [the live project preflight audit](13-live-supabase-preflight-audit.md) for the currently verified live migration ledger and rollout blockers.
 
+## Security review status
+
+See [the migration security review](14-migration-security-review.md). The current decision is **NO-GO**: subscription expiry checks, private helper grants, message quota transitions, channel entitlements, audit redaction and real Storage integration testing require follow-up before production rollout.
+
 ## Before applying to production
 
 1. Run the PostgreSQL 17 GitHub Actions migration and smoke-test workflow; it uses an ephemeral database at no additional cost. This is not a full Supabase emulator.
