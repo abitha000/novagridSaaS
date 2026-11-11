@@ -1,0 +1,3 @@
+## Supabase Storage placeholder handling
+
+Supabase Storage's upload flow first inserts an object placeholder with empty metadata, then updates the row with backend-measured object metadata after the bytes have been uploaded. The quota trigger now validates the tenant path and active subscription on the placeholder INSERT, then enforces the byte quota when the completed metadata UPDATE supplies the actual size. An UPDATE with missing size is rejected; quota enforcement is not disabled.
