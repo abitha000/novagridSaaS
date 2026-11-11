@@ -1,8 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth, useLiveTenant } from '../lib/auth'
 import { LivePayments, LivePeople, LiveStaff } from './LiveData'
+import { listPayments, type PaymentRecord } from '../lib/api/payments'
+import { listNotifications, listRecipients } from '../lib/api/notifications'
+import type { NotificationRow, RecipientRow } from '../lib/api/types'
 import { busStops, inr, members, students } from '../data'
 import { AreaChart, Avatar, Badge, BarChart, Button, Card, CardHeader, Chips, DataTable, Donut, Dropdown, EmptyState, Field, Input, Logo, Modal, PageHeader, SearchBox, Select, Skel, Stat, Status, Tabs, Toggle, cx, useFakeLoad, useToast } from '../ui'
 
@@ -272,6 +275,8 @@ export function PaymentsPage() {
   </>
 }
 export function ReportsPage() {
+  const tenantId = useLiveTenant()
+  if (tenantId) return <LiveReports tenantId={tenantId} />
   const toast = useToast()
   return (
     <>
@@ -319,4 +324,67 @@ export function PeoplePage({ ind }: { ind: Ind }) {
 export function StaffPage() {
   const tenant = useLiveTenant()
   return tenant ? <LiveStaff key={tenant} tenantId={tenant} /> : <DemoStaffPage />
+}
+
+
+/* ---------------- Reports (live tenant data) ---------------- */
+function LiveReports({ tenantId }: { tenantId: string }) {
+  const [payments, setPayments] = useState<PaymentRecord[] | null>(null)
+  const [notifications, setNotifications] = useState<NotificationRow[] | null>(null)
+  const [recipients, setRecipients] = useState<RecipientRow[] | null>(null)
+  const [error, setError] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+
+  const load = async () => {
+    setRefreshing(true)
+    setError('')
+    try {
+      const [p, n] = await Promise.all([listPayments(tenantId), listNotifications(tenantId)])
+      const recipientGroups = await Promise.all(n.map(row => listRecipients(row.id)))
+      setPayments(p)
+      setNotifications(n)
+      setRecipients(recipientGroups.flat())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load reports.')
+      setPayments([])
+      setNotifications([])
+      setRecipients([])
+    } finally { setRefreshing(false) }
+  }
+  useEffect(() => { void load() }, [tenantId])
+
+  const months = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+      return { key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: d.toLocaleDateString('en-IN',{month:'short'}) }
+    })
+  }, [])
+  const monthly = months.map(m => (payments ?? []).filter(p => p.status === 'received' && p.paid_at.slice(0,7) === m.key).reduce((sum,p) => sum + p.amount_paise,0) / 100)
+  const total = (payments ?? []).filter(p => p.status === 'received').reduce((sum,p) => sum + p.amount_paise,0)
+  const delivered = (recipients ?? []).filter(r => ['delivered','read'].includes(r.status)).length
+  const failed = (recipients ?? []).filter(r => r.status === 'failed').length
+  const attempted = (recipients ?? []).filter(r => !['queued','skipped'].includes(r.status)).length
+  const fmt = (n:number) => new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n/100)
+  return <>
+    <PageHeader title="Reports" sub="Live operational and financial figures from this organisation." actions={<Button variant="secondary" icon={<I.RefreshCw size={16}/>} loading={refreshing} onClick={() => void load()}>Refresh</Button>}/>
+    {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm p-4">{error}</div>}
+    <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
+      <Stat label="Recorded collections" value={payments ? fmt(total) : '—'} icon={<I.Wallet size={18}/>}/>
+      <Stat label="Payment records" value={String(payments?.length ?? '—')} icon={<I.Receipt size={18}/>}/>
+      <Stat label="Campaigns (latest 50)" value={String(notifications?.length ?? '—')} icon={<I.MessageSquare size={18}/>}/>
+      <Stat label="Delivered / read" value={recipients ? `${delivered} / ${recipients.length}` : '—'} icon={<I.CheckCheck size={18}/>}/>
+    </div>
+    <div className="grid xl:grid-cols-2 gap-4">
+      <Card><CardHeader title="Collections by month" sub="Received manual payments · INR"/><div className="p-5">{payments === null ? <Skel className="h-52"/> : <BarChart data={monthly} labels={months.map(m=>m.label)} format={v=>fmt(v*100)}/>}</div></Card>
+      <Card><CardHeader title="Notification outcomes" sub="Recipient records in the latest 50 campaigns"/><div className="p-5 space-y-4">
+        {recipients === null ? <Skel className="h-52"/> : <>
+          <div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-ng-canvas p-4"><div className="text-xs text-ng-mute">Delivered or read</div><div className="text-2xl font-bold">{delivered}</div></div><div className="rounded-xl bg-ng-canvas p-4"><div className="text-xs text-ng-mute">Failed</div><div className="text-2xl font-bold">{failed}</div></div></div>
+          <div className="h-3 rounded-full bg-ng-tint overflow-hidden flex"><div className="bg-ng-midnight" style={{width:`${recipients.length ? delivered/recipients.length*100 : 0}%`}}/><div className="bg-red-500" style={{width:`${recipients.length ? failed/recipients.length*100 : 0}%`}}/></div>
+          <p className="text-xs text-ng-mute">{attempted} attempted status records · {recipients.length - attempted} queued or skipped</p>
+        </>}
+      </div></Card>
+    </div>
+    <p className="text-xs text-ng-mute mt-4">Collections include only received manual entries. Notification figures cover recipients attached to the latest 50 campaigns; no estimated or demo values are shown.</p>
+  </>
 }
