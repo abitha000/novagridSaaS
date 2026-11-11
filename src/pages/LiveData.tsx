@@ -3,7 +3,8 @@ import * as I from 'lucide-react'
 import { Avatar, Badge, Button, Card, Confirm, DataTable, Dropdown, EmptyState, ErrorState, Field, Input, Modal, PageHeader, SearchBox, Select, Status, useToast } from '../ui'
 import { BackendError, errorMessage } from '../lib/api/errors'
 import { changeStaffRole, inviteStaff, listAssignableRoles, listStaff, setStaffStatus } from '../lib/api/staff'
-import { archiveContact, createContact, listContacts, recordConsent } from '../lib/api/contacts'
+import { archiveContact, createContact, createContacts, listAllContacts, listContacts, recordConsent } from '../lib/api/contacts'
+import { contactsToCsv, parseContactsCsv, type CsvContactRow } from '../lib/csv'
 import type { Channel, Contact, StaffMember } from '../lib/api/types'
 
 const SchemaNote = ({ e }: { e: unknown }) =>
@@ -64,6 +65,10 @@ export function LivePeople({ tenantId }: { tenantId: string }) {
   const [form, setForm] = useState({ type: 'member', full_name: '', phone_e164: '', email: '' })
   const [del, setDel] = useState<Contact | null>(null)
   const [busy, setBusy] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importRows, setImportRows] = useState<CsvContactRow[]>([])
+  const [importError, setImportError] = useState('')
+  const [exporting, setExporting] = useState(false)
   const load = useCallback(() => {
     setErr(null)
     listContacts(tenantId, { search: q, page }).then(setData).catch((e) => { setErr(e); setData({ rows: [], total: 0 }) })
@@ -73,7 +78,7 @@ export function LivePeople({ tenantId }: { tenantId: string }) {
   const consent = (c: Contact, ch: Channel) => c.communication_preferences?.find((p) => p.channel === ch)?.consent_status ?? 'unknown'
   return (
     <>
-      <PageHeader title="People" sub="Contacts never receive an account. Phone numbers are masked." actions={<Button icon={<I.UserPlus size={16} />} onClick={() => setAdd(true)}>Add person</Button>} />
+      <PageHeader title="People" sub="Contacts never receive an account. Phone numbers are masked." actions={<><Button variant="secondary" icon={<I.Download size={16} />} loading={exporting} onClick={async () => { setExporting(true); try { const rows = await listAllContacts(tenantId); const blob = new Blob([contactsToCsv(rows)], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'novagrid-contacts.csv'; link.click(); URL.revokeObjectURL(url); toast(`Exported ${rows.length} contacts`) } catch (e) { toast(errorMessage(e), 'err') } finally { setExporting(false) } }}>Export CSV</Button><Button variant="secondary" icon={<I.Upload size={16} />} onClick={() => { setImportRows([]); setImportError(''); setImportOpen(true) }}>Import CSV</Button><Button icon={<I.UserPlus size={16} />} onClick={() => setAdd(true)}>Add person</Button></>} />
       <SchemaNote e={err} />
       <Card>
         <div className="p-4 border-b border-ng-line"><SearchBox value={q} onChange={(v) => { setPage(0); setQ(v) }} placeholder="Search name, email or phone" className="md:w-80" /></div>
@@ -93,6 +98,14 @@ export function LivePeople({ tenantId }: { tenantId: string }) {
           </>
         )}
       </Card>
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import contacts from CSV" footer={<><Button variant="secondary" onClick={() => setImportOpen(false)}>Cancel</Button><Button loading={busy} disabled={!importRows.length || importRows.some((row) => row.errors.length > 0)} onClick={async () => { setBusy(true); try { const count = await createContacts(tenantId, importRows); toast(`Imported ${count} contacts`); setImportOpen(false); setImportRows([]); setPage(0); load() } catch (e) { toast(errorMessage(e), 'err') } finally { setBusy(false) } }}>Import {importRows.length} contacts</Button></>}>
+        <div className="space-y-3">
+          <p className="text-sm text-ng-mute">Choose a CSV file with a <code>full_name</code> column and optional <code>type</code>, <code>phone_e164</code>, and <code>email</code> columns. Phones must use international format. Import does not grant messaging consent.</p>
+          <input type="file" accept=".csv,text/csv" className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-ng-tint file:px-3 file:py-2 file:font-medium" onChange={async (event) => { const file = event.target.files?.[0]; setImportRows([]); setImportError(''); if (!file) return; if (file.size > 2 * 1024 * 1024) { setImportError('CSV must be 2 MB or smaller.'); return } try { setImportRows(parseContactsCsv(await file.text())) } catch (e) { setImportError(errorMessage(e)) } }} />
+          {importError && <p className="text-sm text-red-600">{importError}</p>}
+          {importRows.length > 0 && <div className="rounded-xl border border-ng-line p-3 space-y-2"><div className="text-sm font-semibold">{importRows.length} rows found · {importRows.filter((row) => row.errors.length === 0).length} valid · {importRows.filter((row) => row.errors.length > 0).length} need correction</div><div className="max-h-48 overflow-auto text-xs space-y-1">{importRows.slice(0, 8).map((row) => <div key={row.rowNumber} className="flex justify-between gap-3"><span>Row {row.rowNumber}: {row.full_name || 'Missing name'}</span><span className={row.errors.length ? 'text-red-600' : 'text-emerald-700'}>{row.errors.join('; ') || 'Ready'}</span></div>)}</div>{importRows.length > 8 && <p className="text-xs text-ng-mute">Showing first 8 rows.</p>}</div>}
+        </div>
+      </Modal>
       <Modal open={add} onClose={() => setAdd(false)} title="Add person" footer={<><Button variant="secondary" onClick={() => setAdd(false)}>Cancel</Button><Button loading={busy} onClick={async () => { setBusy(true); try { await createContact(tenantId, form); toast('Person added. Record consent before messaging.'); setAdd(false); setForm({ type: 'member', full_name: '', phone_e164: '', email: '' }); load() } catch (e) { toast(errorMessage(e), 'err') } finally { setBusy(false) } }}>Add person</Button></>}>
         <div className="space-y-4"><Field label="Full name"><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></Field><Field label="Type"><Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{['member', 'student', 'parent', 'patient', 'guest', 'person'].map((t) => <option key={t}>{t}</option>)}</Select></Field><Field label="Mobile (international format)" hint="e.g. +919876543210"><Input value={form.phone_e164} onChange={(e) => setForm({ ...form, phone_e164: e.target.value.replace(/[\s-]/g, '') })} /></Field><Field label="Email (optional)"><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field></div>
       </Modal>
