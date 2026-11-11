@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth, useLiveTenant } from '../lib/auth'
-import { LiveGymMembers, LivePayments, LivePeople, LiveStaff } from './LiveData'
+import { LiveGymAttendance, LiveGymMembers, LivePayments, LivePeople, LiveStaff } from './LiveData'
 import { listPayments, type PaymentRecord } from '../lib/api/payments'
 import { listNotifications, listRecipients } from '../lib/api/notifications'
 import type { NotificationRow, RecipientRow } from '../lib/api/types'
@@ -227,6 +227,7 @@ export function ModulePage({ ind, k }: { ind: Ind; k: string }) {
   const toast = useToast()
   const liveTenant = useLiveTenant()
   const add = <Button icon={<I.Plus size={16} />} onClick={() => toast('Create form opened (prototype)', 'info')}>Add</Button>
+  if (k === 'attendance' && ind === 'gym' && liveTenant) return <LiveGymAttendance key={liveTenant} tenantId={liveTenant} />
   if (k === 'attendance') return <AttendancePage ind={ind} />
   if (k === 'timetables') return <TimetablePage />
   if (k === 'transport') return <TransportPage ind={ind} />

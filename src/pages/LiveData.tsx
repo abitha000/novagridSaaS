@@ -7,6 +7,7 @@ import { archiveContact, createContact, createContacts, listAllContacts, listCon
 import { contactsToCsv, parseContactsCsv, type CsvContactRow } from '../lib/csv'
 import type { Channel, Contact, StaffMember } from '../lib/api/types'
 import { createGymMembership, listGymMemberships, setGymMembershipStatus, type GymMembership } from '../lib/api/gym'
+import { listGymAttendance, saveGymAttendance, type GymAttendanceStatus } from '../lib/api/gym-attendance'
 
 const SchemaNote = ({ e }: { e: unknown }) =>
   e instanceof BackendError && e.kind === 'schema_missing' ? (
@@ -223,5 +224,56 @@ export function LiveGymMembers({ tenantId }: { tenantId: string }) {
         <Field label="Notes (optional)"><Input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
       </div>
     </Modal>
+  </>
+}
+
+
+/* ---------------- Gym attendance (live) ---------------- */
+export function LiveGymAttendance({ tenantId }: { tenantId: string }) {
+  const toast = useToast()
+  const today = new Date().toISOString().slice(0, 10)
+  const [date, setDate] = useState(today)
+  const [people, setPeople] = useState<Contact[]>([])
+  const [marks, setMarks] = useState<Record<string, GymAttendanceStatus>>({})
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const [contacts, attendance] = await Promise.all([listAllContacts(tenantId), listGymAttendance(tenantId, date)])
+      const active = contacts.filter(x => x.type === 'member' || x.type === 'person')
+      setPeople(active)
+      setMarks(Object.fromEntries(attendance.map(x => [x.contact_id, x.status])))
+    } catch (e) { setError(e) } finally { setLoading(false) }
+  }, [tenantId, date])
+  useEffect(() => { void load() }, [load])
+
+  const counts = { present: Object.values(marks).filter(x => x === 'present').length, late: Object.values(marks).filter(x => x === 'late').length, absent: Object.values(marks).filter(x => x === 'absent').length }
+  const save = async () => {
+    setBusy(true)
+    try {
+      await saveGymAttendance(tenantId, date, Object.entries(marks).map(([contact_id, status]) => ({ contact_id, status })))
+      toast('Attendance saved')
+      await load()
+    } catch (e) { toast(errorMessage(e), 'err') } finally { setBusy(false) }
+  }
+
+  return <>
+    <PageHeader title="Gym attendance" sub="Live daily attendance records for this organisation." actions={<><Field label="Attendance date"><Input type="date" value={date} onChange={e => setDate(e.target.value)} /></Field><Button loading={busy} disabled={!Object.keys(marks).length} onClick={() => void save()}>Save attendance</Button></>} />
+    <SchemaNote e={error} />
+    <div className="grid grid-cols-3 gap-3 mb-4">
+      <Stat label="Present" value={String(counts.present)} icon={<I.UserCheck size={18} />} />
+      <Stat label="Late" value={String(counts.late)} icon={<I.Clock size={18} />} />
+      <Stat label="Absent" value={String(counts.absent)} icon={<I.UserX size={18} />} />
+    </div>
+    <Card>
+      {error && !(error instanceof BackendError && error.kind === 'schema_missing') ? <ErrorState onRetry={() => void load()} body={errorMessage(error)} /> :
+      <DataTable loading={loading} rows={people} empty={<EmptyState title="No members found" body="Add members before recording attendance." />} cols={[
+        { key: 'person', header: 'Member', mobile: 'title', render: p => <div className="flex items-center gap-3"><Avatar name={p.full_name} /><div><div className="font-medium">{p.full_name}</div><div className="text-xs text-ng-mute">{p.phone_e164 ?? p.email ?? '—'}</div></div></div> },
+        { key: 'mark', header: 'Attendance', render: p => <div className="inline-flex rounded-lg border border-ng-line p-0.5">{(['present','late','absent'] as GymAttendanceStatus[]).map(s => <button key={s} onClick={() => setMarks(prev => ({ ...prev, [p.id]: s }))} className={cx('h-8 px-3 text-xs rounded-md font-medium capitalize', marks[p.id] === s ? (s === 'absent' ? 'bg-ng-err text-white' : s === 'late' ? 'bg-ng-warn text-white' : 'bg-ng-ok text-white') : 'text-ng-mute hover:bg-ng-canvas')}>{s}</button>)}</div> },
+      ]} />}
+    </Card>
   </>
 }
