@@ -65,6 +65,10 @@ export function LivePeople({ tenantId }: { tenantId: string }) {
   const [form, setForm] = useState({ type: 'member', full_name: '', phone_e164: '', email: '' })
   const [del, setDel] = useState<Contact | null>(null)
   const [busy, setBusy] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importRows, setImportRows] = useState<CsvContactRow[]>([])
+  const [importError, setImportError] = useState('')
+  const [exporting, setExporting] = useState(false)
   const load = useCallback(() => {
     setErr(null)
     listContacts(tenantId, { search: q, page }).then(setData).catch((e) => { setErr(e); setData({ rows: [], total: 0 }) })
