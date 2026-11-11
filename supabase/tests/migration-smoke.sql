@@ -116,7 +116,7 @@ end $$;
 
 
 -- Pricing catalogue must contain three plans per launch industry with correct scope and prices.
-do $
+do $pricing$
 begin
   if (select count(*) from public.subscription_plans where active and industry_category_id is not null and key like 'gym_%') <> 3 then
     raise exception 'expected three active Gym plans';
@@ -137,6 +137,6 @@ begin
   if not exists (select 1 from public.subscription_plans where key='education_growth' and price_inr_monthly=2999 and limits->>'active_students'='750') then
     raise exception 'Education Growth pricing or capacity mismatch';
   end if;
-end $;
+end $pricing$;
 
 select 'NOVAGRID migration and security smoke tests passed' as result;
