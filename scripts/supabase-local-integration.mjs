@@ -162,7 +162,7 @@ console.log("PASS E2E: platform admin separately assigned trial subscription");
  const promote=await staffPatch(operatorToken,operatorRows[0].id,{role_id:ownerRoleRows[0].id});
  assert(Array.isArray(promote)&&promote.length===0,"Operator unexpectedly promoted itself");
  const staffAdminToken=await loginAs("staff-admin@novagrid.test");
- const adminSelf=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${adminStaffId}&select=id`,{headers:{apikey:anon,Authorization:`Bearer ${adminToken}`}});
+ const adminSelf=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${adminStaffId}&select=id`,{headers:{apikey:anon,Authorization:`Bearer ${staffAdminToken}`}});
  const adminRows=await adminSelf.json();
  assert(adminSelf.ok&&adminRows.length===1,"Admin staff membership was not visible");
  const adminPromotion=await staffPatch(staffAdminToken,adminRows[0].id,{role_id:ownerRoleRows[0].id});
