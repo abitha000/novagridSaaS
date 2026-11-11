@@ -1,0 +1,30 @@
+name: Staff invitation function validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/proposed-functions/invite-staff/**'
+      - 'supabase/migrations/**'
+      - '.github/workflows/staff-invitation-function.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/proposed-functions/invite-staff/**'
+      - 'supabase/migrations/**'
+      - '.github/workflows/staff-invitation-function.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deno-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check proposed Edge Function
+        run: deno check supabase/proposed-functions/invite-staff/index.ts
