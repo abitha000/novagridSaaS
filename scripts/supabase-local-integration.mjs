@@ -152,9 +152,10 @@ console.log("PASS E2E: platform admin separately assigned trial subscription");
    return data;
  };
  const expectOwnerPromotionDenied=async(token,id)=>{
-   try { await staffPatch(token,id,{role_id:ownerRoleRows[0].id}); }
-   catch(error) { assert(String(error).includes("only an owner can change owner assignments"),"Owner-role promotion failed for an unexpected reason"); return; }
-   throw new Error("Non-owner unexpectedly promoted itself to owner");
+   const response=await fetch(base+`/rest/v1/tenant_users?id=eq.${id}&select=id,role_id`,{method:"PATCH",headers:{apikey:anon,Authorization:`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({role_id:ownerRoleRows[0].id})});
+   const raw=await response.text();let data;try{data=raw?JSON.parse(raw):null}catch{data=raw}
+   if(response.ok){assert(Array.isArray(data)&&data.length===0,"Non-owner unexpectedly changed its membership to owner");return;}
+   assert(response.status===403&&data?.message==="only an owner can change owner assignments","Owner-role promotion was rejected for an unexpected reason: "+raw.slice(0,300));
  };
  const operatorUpdate=await staffPatch(operatorToken,targetMembershipId,{status:"active"});
  assert(Array.isArray(operatorUpdate)&&operatorUpdate.length===0,"Operator without staff.manage changed another staff member");
