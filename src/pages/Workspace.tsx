@@ -28,7 +28,7 @@ export function WorkspaceLayout({ ind, path, children }: { ind: Ind; path: strin
   const [drawer, setDrawer] = useState(false)
   const auth = useAuth()
   const base = `/app/${ind}`
-  const core: [string, string, I.LucideIcon][] = [['Overview', 'overview', I.LayoutGrid], ['People', 'people', I.Contact], ['Staff', 'staff', I.UserCog], ['Operations', 'operations', I.Workflow], ['Communications', 'comms', I.MessageSquareText], ['Payments', 'payments', I.CreditCard], ['Reports', 'reports', I.ChartColumn], ['Automation', 'automation', I.Zap], ['Settings', 'settings', I.Settings]]
+  const core: [string, string, I.LucideIcon][] = [['Overview', 'overview', I.LayoutGrid], ['People', 'people', I.Contact], ['Staff', 'staff', I.UserCog], ['Operations', 'operations', I.Workflow], ['Communications', 'comms', I.MessageSquareText], ['Payments', 'payments', I.CreditCard], ['Reports', 'reports', I.ChartColumn], ['Automation', 'automation', I.Zap], ['Settings', 'settings', I.Settings], ['Files', 'files', I.FolderOpen]]
   const t = tenant[ind]
   const link = (to: string, label: string, Ic: I.LucideIcon, sub = false) => {
     const active = path === to || path.startsWith(to + '/')
