@@ -85,10 +85,10 @@ export function FilesPage() {
         <Badge tone={limitBytes && usedBytes >= limitBytes ? 'err' : 'ok'}>{limitBytes ? Math.max(0, 100 - percent).toFixed(0) + '% available' : 'Quota unavailable'}</Badge>
       </div>
       <div className="mt-4 h-2.5 rounded-full bg-ng-canvas overflow-hidden"><div className="h-full rounded-full bg-ng-indigo transition-all" style={{ width: percent + '%' }} /></div>
-      <p className="mt-2 text-xs text-ng-mute">Usage is calculated from the files returned by Storage (up to 1,000 items in this view). The database quota trigger remains authoritative.</p>
+      <p className="mt-2 text-xs text-ng-mute">Usage includes all pages returned by Storage. The database quota trigger remains authoritative.</p>
     </Card>
     <Card>
-      <div className="p-4 border-b border-ng-line flex flex-wrap justify-between items-center gap-3"><div><div className="font-semibold">Organisation files</div><div className="text-xs text-ng-mute">{files.length} file(s) listed</div></div>
+      <div className="p-4 border-b border-ng-line flex flex-wrap justify-between items-center gap-3"><div><div className="font-semibold">Organisation files</div><div className="text-xs text-ng-mute">{files.length} file(s)</div></div>
         <input ref={picker} type="file" multiple className="hidden" onChange={e => void upload(e.target.files)} />
         <Button onClick={() => picker.current?.click()} loading={uploading} disabled={loading || uploading} icon={<I.Upload size={15} />}>Upload files</Button>
       </div>

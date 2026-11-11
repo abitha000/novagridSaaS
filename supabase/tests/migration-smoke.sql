@@ -282,3 +282,39 @@ end
 $storage_quota$;
 reset role;
 
+
+
+-- Storage read isolation and mutation lifecycle checks. The test-only Storage
+-- fixture validates SQL policy behavior; it is not a substitute for testing
+-- the real Supabase Storage API and signed-URL flow.
+reset role;
+insert into storage.objects (bucket_id,name,metadata)
+values ('novagrid-files','20000000-0000-0000-0000-000000000002/documents/tenant-b.pdf','{"size":1000}'::jsonb);
+update public.subscriptions set status='expired'
+where organisation_id='20000000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+do $storage_isolation$
+declare
+  visible_count int;
+  deleted_count int;
+begin
+  select count(*) into visible_count from storage.objects where bucket_id='novagrid-files';
+  if visible_count <> 1 then
+    raise exception 'tenant A should see only its own Storage object, saw %', visible_count;
+  end if;
+
+  -- RLS filters the delete to zero rows when the tenant is no longer writable.
+  delete from storage.objects
+  where bucket_id='novagrid-files'
+    and name='20000000-0000-0000-0000-000000000001/documents/first.pdf';
+  get diagnostics deleted_count = row_count;
+  if deleted_count <> 0 then
+    raise exception 'expired tenant unexpectedly deleted a file';
+  end if;
+end
+$storage_isolation$;
+reset role;
+update public.subscriptions set status='active'
+where organisation_id='20000000-0000-0000-0000-000000000001';

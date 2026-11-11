@@ -1,0 +1,73 @@
+name: NOVAGRID CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+
+  postgres-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: novagrid_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d novagrid_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: novagrid_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Bootstrap Supabase auth and Storage test surfaces
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/bootstrap.sql
+      - name: Apply all migrations in order
+        run: |
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying $migration"
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+      - name: Run schema, tenant-isolation, permissions, quota and Storage policy tests
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/migration-smoke.sql
+      - name: Verify legacy SECURITY DEFINER RPC grants
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $check$
+          BEGIN
+            IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL
+              AND (has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE')
+                OR has_function_privilege('authenticated', 'public.rls_auto_enable()', 'EXECUTE')) THEN
+              RAISE EXCEPTION 'legacy RLS helper remains executable by API roles';
+            END IF;
+          END
+          $check$;
+          SQL

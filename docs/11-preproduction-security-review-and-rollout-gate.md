@@ -29,7 +29,7 @@ The latest branch head passed the PostgreSQL 17 GitHub Actions migration and smo
 - Do not create a paid Supabase branch or another Supabase project for routine staging.
 - GitHub Actions provisions an ephemeral PostgreSQL 17 service container for each CI run, applies all committed migrations, and runs the SQL smoke tests. The container is discarded after the job.
 - Vercel Preview deployments may be used for frontend review with non-production test credentials. Never point preview builds at production write credentials.
-- This PostgreSQL container is not a complete Supabase emulator: Auth, Storage, Edge Functions, Realtime, provider webhooks and production backup/restore still require separate validation.
+- This PostgreSQL container is not a complete Supabase emulator: Auth, Storage, Edge Functions, Realtime, provider webhooks and production backup/restore still require separate validation. Storage SQL policies are smoke-tested against a minimal fixture only; real Storage API behavior is not certified by CI.
 - Production Supabase remains read-only until an approved rollout window and verified backup are in place.
 
 ## Security review gates
@@ -63,6 +63,11 @@ The latest branch head passed the PostgreSQL 17 GitHub Actions migration and smo
 6. Bootstrap the first platform super-admin through a secure one-time procedure; verify the admin can sign in and no tenant can impersonate platform roles.
 7. Connect the app and verify registration, approval, subscription assignment, staff invitations, contact CRUD and tenant isolation with two test organisations.
 8. Keep provider dispatch disabled until its separate delivery pipeline is implemented.
+9. Before enabling tenant file management on a real project, run the Storage rehearsal below with two disposable organisations and authenticated users.
+
+## Required real-Supabase Storage rehearsal (not covered by PostgreSQL CI)
+
+Use disposable test organisations only after the reviewed migrations have been applied in an approved environment. Do not use production customer files. Verify: (1) authenticated tenant A can list, upload, open and delete its own file; (2) tenant A cannot list, sign, overwrite or delete tenant B's object by guessing its path; (3) a non-member receives no object metadata or signed URL; (4) expired, suspended and non-approved organisations cannot upload, update or delete; (5) a file larger than remaining quota is rejected and concurrent uploads cannot exceed quota; (6) pagination returns all files when more than 1,000 objects exist; (7) Storage object metadata reports byte size as expected; and (8) signed URLs expire after the configured 60 seconds. Record the project, test identities, outcomes and cleanup. Never place service-role credentials in the browser.
 
 ## Known product limitations
 
