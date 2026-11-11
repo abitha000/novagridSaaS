@@ -1,6 +1,10 @@
 name: Supabase isolated-project preflight
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       target_project_ref:
@@ -16,7 +20,18 @@ permissions:
   contents: read
 
 jobs:
+  validate-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check preflight script syntax
+        run: node --check scripts/supabase-rehearsal-preflight.mjs
+
   preflight:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       SUPABASE_URL: ${{ secrets.REHEARSAL_SUPABASE_URL }}
