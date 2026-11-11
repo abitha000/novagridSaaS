@@ -128,6 +128,9 @@ console.log("PASS E2E: platform admin separately assigned trial subscription");
  assert(operatorId&&targetId&&adminStaffId,"Staff integration users were not created");
  const staffFixtures=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-v",`operator_id=${operatorId}`,"-v",`target_id=${targetId}`,"-v",`admin_id=${adminStaffId}`,"-f","supabase/tests/staff-rbac-fixtures.sql"],{encoding:"utf8"});
  if(staffFixtures.status!==0)throw new Error(staffFixtures.stderr||"Staff RBAC fixtures failed");
+ const crossTenantRole=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-v",`target_id=${targetId}`,"-c",`insert into public.tenant_users(tenant_id,user_id,role_id,full_name,email,status) select '21000000-0000-0000-0000-000000000002', :'target_id'::uuid, r.id, 'Cross Tenant', 'cross-tenant@novagrid.test', 'invited' from public.roles r where r.tenant_id='21000000-0000-0000-0000-000000000001' and r.key='tenant_custom';`],{encoding:"utf8"});
+ assert(crossTenantRole.status!==0&&String(crossTenantRole.stderr).includes("staff role belongs to a different organisation"),"Cross-tenant role assignment was not rejected by the database");
+
  const operatorToken=await loginAs("staff-operator@novagrid.test");
  const targetQuery=await fetch(base+`/rest/v1/tenant_users?tenant_id=eq.21000000-0000-0000-0000-000000000001&user_id=eq.${targetId}&select=id,status`,{headers:{apikey:anon,Authorization:`Bearer ${ownerToken}`}});
  const targetMemberships=await targetQuery.json();
@@ -159,5 +162,6 @@ console.log("PASS E2E: platform admin separately assigned trial subscription");
  assert(Array.isArray(ownerUpdate)&&ownerUpdate.length===1&&ownerUpdate[0].status==="active","Owner could not activate invited staff");
  console.log("PASS Staff RBAC: operator cannot manage staff; admin cannot promote itself to owner");
  console.log("PASS Staff RBAC: organisation owner can activate invited staff");
+ console.log("PASS Staff RBAC: database rejects a role owned by another tenant");
 
 console.log("PASS cleanup: synthetic data is confined to the disposable stack; workflow teardown removes it");
