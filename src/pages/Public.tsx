@@ -393,7 +393,7 @@ export function RegisterPage() {
   const startLive = async () => {
     setBusy(true)
     try {
-      const input = { name: f.org, ownerName: f.owner, phone: f.phone, address: f.address, country: f.country, state: f.state, city: f.city, categoryKey: industries.find((i) => i.name === f.industry)?.key ?? 'education', orgType: f.type, planKey: planTiers.find((p) => p.name === f.plan)?.key ?? 'trial' }
+      const input = { name: f.org.trim(), ownerName: f.owner.trim(), phone: f.phone.replace(/[\s()-]/g, ''), address: f.address.trim(), country: f.country, state: f.state.trim(), city: f.city.trim(), categoryKey: industries.find((i) => i.name === f.industry)?.key ?? 'education', orgType: f.type, planKey: planTiers.find((p) => p.name === f.plan)?.key ?? 'trial' }
       const r = await auth.signUp(f.email.trim(), f.password, { token: crypto.randomUUID(), input })
       setSent(r.needsEmailConfirmation)
       setStep(3)
@@ -404,14 +404,28 @@ export function RegisterPage() {
     }
   }
   const next = () => {
-    if (live && step === 1 && f.password.length < 8) return setErr('Choose a password of at least 8 characters.')
-    if (live && step === 2) { setErr(''); return void startLive() }
-    if (live && step === 3) return go('/login')
-    if (step === 0 && (!f.org || !f.city)) return setErr('Organisation name and city are required.')
-    if (step === 1 && (!/^\S+@\S+\.\S+$/.test(f.email) || f.phone.length < 8)) return setErr('Enter a valid email and phone number.')
-    if (!live && step === 3 && otp.join('').length < 6) return setErr('Enter the 6-digit code we sent you.')
     setErr('')
-    if (step === 3) { setBusy(true); return void setTimeout(() => { setBusy(false); setStep(4) }, 900) }
+    if (step === 0) {
+      if (f.org.trim().length < 2) return setErr('Enter an organisation name with at least 2 characters.')
+      if (f.city.trim().length < 2) return setErr('Enter your organisation city.')
+      if (f.state.trim().length < 2) return setErr('Enter your state.')
+    }
+    if (step === 1) {
+      if (f.owner.trim().length < 2) return setErr('Owner full name is required.')
+      if (!/^\S+@\S+\.\S+$/.test(f.email.trim())) return setErr('Enter a valid work email address.')
+      const normalizedPhone = f.phone.replace(/[\s()-]/g, '')
+      if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) return setErr('Enter a valid phone number in international format, e.g. +919876543210.')
+      if (live && f.password.length < 8) return setErr('Choose a password of at least 8 characters.')
+    }
+    if (step === 2) {
+      if (!f.industry || !industries.some((i) => i.name === f.industry)) return setErr('Select a valid industry category.')
+      if (!f.type.trim()) return setErr('Enter your organisation type.')
+      if (!planTiers.some((p) => p.name === f.plan)) return setErr('Select a valid preferred plan.')
+      if (live) return void startLive()
+    }
+    if (live && step === 3) return go('/login')
+    if (!live && step === 3 && otp.join('').length !== 6) return setErr('Enter the 6-digit code we sent you.')
+    if (!live && step === 3) { setBusy(true); return void setTimeout(() => { setBusy(false); setStep(4) }, 900) }
     setStep(step + 1)
   }
   const light = '[&_span]:!text-white/80'
@@ -422,7 +436,7 @@ export function RegisterPage() {
       <div className="sm:hidden text-xs text-white/50 mt-2">Step {step + 1} of 5 · {steps[step]}</div>
       <div key={step} className={cx('mt-8 rounded-2xl border border-white/10 bg-white/[0.04] p-6 animate-rise text-ng-ink', light)}>
         {step === 0 && <div className="grid sm:grid-cols-2 gap-4"><div className="sm:col-span-2"><Field label="Organisation name"><Input value={f.org} onChange={set('org')} placeholder="e.g. St. Xavier Institute" /></Field></div><div className="sm:col-span-2"><Field label="Address"><Input value={f.address} onChange={set('address')} /></Field></div><Field label="Country"><Select value={f.country} onChange={set('country')}><option>India</option></Select></Field><Field label="State"><Input value={f.state} onChange={set('state')} /></Field><Field label="City"><Input value={f.city} onChange={set('city')} /></Field></div>}
-        {step === 1 && <div className="grid gap-4"><Field label="Owner full name"><Input value={f.owner} onChange={set('owner')} /></Field><Field label="Work email"><Input type="email" value={f.email} onChange={set('email')} /></Field><Field label="Mobile number" hint={live ? 'International format, e.g. +919876543210. Phone verification needs an SMS provider and is not active yet.' : 'We send a verification code by SMS.'}><Input value={f.phone} onChange={set('phone')} placeholder="+91" /></Field>{live && <Field label="Password" hint="At least 8 characters."><Input type="password" autoComplete="new-password" value={f.password} onChange={set('password')} /></Field>}</div>}
+        {step === 1 && <div className="grid gap-4"><Field label="Owner full name"><Input value={f.owner} onChange={set('owner')} /></Field><Field label="Work email"><Input type="email" value={f.email} onChange={set('email')} /></Field><Field label="Mobile number" hint={live ? 'International format, e.g. +919876543210. Phone verification needs an SMS provider and is not active yet.' : 'We send a verification code by SMS.'}><Input type="tel" autoComplete="tel" value={f.phone} onChange={set('phone')} placeholder="+919876543210" /></Field>{live && <Field label="Password" hint="At least 8 characters."><Input type="password" autoComplete="new-password" value={f.password} onChange={set('password')} /></Field>}</div>}
         {step === 2 && <div className="grid gap-4"><Field label="Industry category" hint="One primary category. Our team approves it before business modules unlock."><Select value={f.industry} onChange={set('industry')}>{industries.map((i) => <option key={i.key}>{i.name}</option>)}</Select></Field><Field label="Organisation type"><Input value={f.type} onChange={set('type')} placeholder="e.g. Private college" /></Field><Field label="Preferred plan"><Select value={f.plan} onChange={set('plan')}>{planTiers.map((p) => <option key={p.key}>{p.name}</option>)}</Select></Field><p className="text-xs text-white/50">Running a gym and a hotel? Register each as its own organisation.</p></div>}
         {step === 3 && live && <div className="text-center py-2"><div className="mx-auto size-14 rounded-full bg-ng-indigo/20 text-ng-sky grid place-items-center"><I.MailCheck /></div><h2 className="mt-4 text-xl font-bold">{sent ? 'Check your email' : 'Account created'}</h2><p className="text-sm text-white/60 mt-2 max-w-sm mx-auto">{sent ? <>We sent a confirmation link to <b>{f.email}</b>. Open it to verify your email. Your organisation is then created and sent for category approval.</> : 'Your email is already confirmed. Sign in to continue.'}</p></div>}
         {step === 3 && !live && <div><p className="text-sm text-white/70">Enter the code sent to <b>{f.email || 'your email'}</b> and <b>{f.phone || 'your phone'}</b>.</p><div className="mt-5 flex gap-2">{otp.map((d, i) => <input key={i} aria-label={`Digit ${i + 1}`} inputMode="numeric" maxLength={1} value={d} onChange={(e) => { const v = [...otp]; v[i] = e.target.value.replace(/\D/g, ''); setOtp(v); if (v[i]) (e.target.nextElementSibling as HTMLInputElement | null)?.focus() }} className="size-12 rounded-lg border border-white/20 bg-white text-center text-lg font-semibold text-ng-ink focus:ring-4 focus:ring-ng-indigo/30 outline-none" />)}</div><button className="mt-4 text-sm text-ng-sky cursor-pointer" onClick={() => setOtp('123456'.split(''))}>Fill demo code</button></div>}
