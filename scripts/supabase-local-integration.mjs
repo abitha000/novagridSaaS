@@ -72,11 +72,7 @@ const adminAuth=await call("/auth/v1/admin/users",{method:"POST",headers:{"Conte
 const ownerId=ownerAuth.user?.id||ownerAuth.id;
 const adminId=adminAuth.user?.id||adminAuth.id;
 assert(ownerId&&adminId,"Registration owner/platform admin Auth users were not created");
-const seedAdmin=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-v",`admin_id=${adminId}`,"-c",`
- insert into public.platform_users(user_id,role,status)
- values (:'admin_id'::uuid,'super_admin','active')
- on conflict (user_id) do update set role='super_admin',status='active';
-`],{encoding:"utf8"});
+const seedAdmin=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-c",`insert into public.platform_users(user_id,role,status) values ('${adminId}'::uuid,'super_admin','active') on conflict (user_id) do update set role='super_admin',status='active';`],{encoding:"utf8"});
 if(seedAdmin.status!==0) throw new Error(seedAdmin.stderr||"platform admin fixture seed failed");
 async function loginAs(email){
  const response=await fetch(base+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:anon,"Content-Type":"application/json"},body:JSON.stringify({email,password})});
