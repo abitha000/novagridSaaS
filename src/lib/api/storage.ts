@@ -11,13 +11,34 @@ export type TenantFile = {
 }
 
 export async function listTenantFiles(tenantId: string): Promise<TenantFile[]> {
-  const { data, error } = await supabase.storage.from(NOVAGRID_FILES_BUCKET)
-    .list(`${tenantId}/files`, { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } })
-  if (error) throw new Error(error.message)
-  return (data ?? []).filter((f) => f.id && f.name).map((f) => ({
-    id: f.id!, name: f.name, created_at: f.created_at ?? '', updated_at: f.updated_at ?? '',
-    metadata: f.metadata as TenantFile['metadata'],
-  }))
+  const files: TenantFile[] = []
+  const pageSize = 1000
+  let offset = 0
+
+  // Storage limits each list response. Continue until a short page is returned.
+  while (true) {
+    const { data, error } = await supabase.storage.from(NOVAGRID_FILES_BUCKET)
+      .list(`${tenantId}/files`, {
+        limit: pageSize,
+        offset,
+        sortBy: { column: 'name', order: 'asc' },
+      })
+    if (error) throw new Error(error.message)
+
+    const page = (data ?? []).filter((f) => f.id && f.name).map((f) => ({
+      id: f.id!,
+      name: f.name,
+      created_at: f.created_at ?? '',
+      updated_at: f.updated_at ?? '',
+      metadata: f.metadata as TenantFile['metadata'],
+    }))
+    files.push(...page)
+
+    if ((data?.length ?? 0) < pageSize) break
+    offset += data!.length
+  }
+
+  return files
 }
 
 export async function uploadTenantFile(tenantId: string, file: File): Promise<void> {
