@@ -12,7 +12,7 @@ export type TenantFile = {
 
 export async function listTenantFiles(tenantId: string): Promise<TenantFile[]> {
   const { data, error } = await supabase.storage.from(NOVAGRID_FILES_BUCKET)
-    .list(`${tenantId}/files`, { limit: 100, sortBy: { column: 'created_at', order: 'desc' } })
+    .list(`${tenantId}/files`, { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } })
   if (error) throw new Error(error.message)
   return (data ?? []).filter((f) => f.id && f.name).map((f) => ({
     id: f.id!, name: f.name, created_at: f.created_at ?? '', updated_at: f.updated_at ?? '',
@@ -40,7 +40,7 @@ export async function openTenantFile(tenantId: string, fileName: string): Promis
   const { data, error } = await supabase.storage.from(NOVAGRID_FILES_BUCKET)
     .createSignedUrl(`${tenantId}/files/${fileName}`, 60)
   if (error) throw new Error(error.message)
-  window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  window.location.assign(data.signedUrl)
 }
 
 export async function getExtraStorageGb(subscriptionId: string): Promise<number> {
