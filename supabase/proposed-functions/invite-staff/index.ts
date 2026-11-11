@@ -85,52 +85,40 @@ Deno.serve(async (req) => {
     const { data: allowed, error: permissionError } = await asUser.rpc('can_manage_staff', { p_tenant: tenantId })
     if (permissionError || allowed !== true) return response({ error: 'forbidden' }, 403, origin)
 
-    // Privileged operations happen only after the caller has passed the RLS-aware check.
+    // Reserve capacity and validate role/duplicates atomically as the caller.
+    const { data: reservationId, error: reserveError } = await asUser.rpc('reserve_staff_invitation', {
+      p_tenant: tenantId,
+      p_email: email,
+      p_role_key: roleKey,
+      p_full_name: fullName || null,
+    })
+    if (reserveError || typeof reservationId !== 'string') {
+      const duplicate = reserveError?.code === '23505'
+      const seats = reserveError?.code === '23514'
+      return response({ error: duplicate ? 'staff_already_exists' : seats ? 'staff_seat_limit_reached' : 'invitation_not_allowed' }, duplicate || seats ? 409 : 403, origin)
+    }
+
+    // The service-role key is used only after caller authentication and a DB reservation.
     const admin = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
-    const { data: existingMembership, error: duplicateError } = await admin
-      .from('tenant_users')
-      .select('id,status')
-      .eq('tenant_id', tenantId)
-      .ilike('email', email)
-      .limit(1)
-    if (duplicateError) return response({ error: 'invitation_lookup_failed' }, 500, origin)
-    if (existingMembership?.length) {
-      return response({ error: existingMembership[0].status === 'invited' ? 'invitation_already_pending' : 'staff_already_exists' }, 409, origin)
-    }
-
-    const { data: role, error: roleError } = await admin
-      .from('roles')
-      .select('id')
-      .is('tenant_id', null)
-      .eq('key', roleKey)
-      .maybeSingle()
-    if (roleError || !role) return response({ error: 'role_unavailable' }, 400, origin)
-
-    // The database trigger reserves a seat for both active staff and pending invitations.
-    // It serialises concurrent inserts under the organisation row lock.
     const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
       data: fullName ? { full_name: fullName } : {},
     })
     if (inviteError || !invited.user) {
+      await admin.rpc('release_staff_invitation', { p_reservation: reservationId })
       return response({ error: 'invite_delivery_failed_or_account_exists' }, 409, origin)
     }
 
-    const { error: membershipError } = await admin.from('tenant_users').insert({
-      tenant_id: tenantId,
-      user_id: invited.user.id,
-      role_id: role.id,
-      email,
-      full_name: fullName || null,
-      status: 'invited',
-      invited_by: userData.user.id,
+    const { error: completionError } = await admin.rpc('complete_staff_invitation', {
+      p_reservation: reservationId,
+      p_user: invited.user.id,
     })
-    if (membershipError) {
-      // Do not return raw database/provider errors. Auth invitation may already have been
-      // issued; operator can reconcile the account safely without exposing internal details.
-      const seatLimit = /staff seat limit reached|eligible subscription/i.test(membershipError.message)
-      return response({ error: seatLimit ? 'staff_seat_limit_reached' : 'invitation_membership_save_failed' }, seatLimit ? 409 : 500, origin)
+    if (completionError) {
+      await admin.rpc('release_staff_invitation', { p_reservation: reservationId })
+      // Auth invitation was already issued. Do not delete an Auth identity or expose
+      // internal DB details; return a reconciliation-safe error for platform support.
+      return response({ error: 'invitation_membership_save_failed' }, 500, origin)
     }
 
     return response({ ok: true, status: 'invited' }, 201, origin)
