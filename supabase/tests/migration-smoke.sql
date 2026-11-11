@@ -251,3 +251,34 @@ end
 $message_quota$;
 
 select 'NOVAGRID migration and security smoke tests passed' as result;
+
+
+-- Storage quota: tenant A can upload within its plan allowance but cannot exceed it
+-- or write into tenant B's namespace. Uses the test-only Storage fixture.
+update public.subscription_plans
+set limits = jsonb_set(limits, '{storage_mb}', '1'::jsonb)
+where key='gym_starter';
+
+set role authenticated;
+set request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+insert into storage.objects (bucket_id,name,metadata)
+values ('novagrid-files','20000000-0000-0000-0000-000000000001/documents/first.pdf','{"size":600000}'::jsonb);
+
+do $storage_quota$
+begin
+  begin
+    insert into storage.objects (bucket_id,name,metadata)
+    values ('novagrid-files','20000000-0000-0000-0000-000000000001/documents/second.pdf','{"size":500000}'::jsonb);
+    raise exception 'storage quota was bypassed';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into storage.objects (bucket_id,name,metadata)
+    values ('novagrid-files','20000000-0000-0000-0000-000000000002/documents/attack.pdf','{"size":1000}'::jsonb);
+    raise exception 'cross-tenant storage write unexpectedly succeeded';
+  exception when insufficient_privilege then null;
+  end;
+end
+$storage_quota$;
+reset role;
+
