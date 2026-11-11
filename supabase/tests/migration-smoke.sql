@@ -19,8 +19,12 @@ join public.roles r on r.tenant_id is null and r.key='owner';
 
 insert into public.subscriptions (organisation_id,plan_id,status,period_end)
 select o.id,p.id,'active',now()+interval '30 days'
-from public.organisations o cross join public.subscription_plans p
-where p.key='basic';
+from public.organisations o
+join public.industry_categories c on c.id=o.industry_category_id
+join public.subscription_plans p on p.key = case c.key
+  when 'gym' then 'gym_starter'
+  when 'education' then 'education_starter'
+end and p.industry_category_id=o.industry_category_id;
 
 insert into public.contacts (tenant_id,full_name)
 values
@@ -179,5 +183,31 @@ begin
     raise exception 'Education Growth pricing or capacity mismatch';
   end if;
 end $pricing$;
+
+
+-- Capacity enforcement: reduce a test plan to the current fixture usage and prove
+-- that the database rejects an additional active person even if the client bypasses UI.
+update public.subscription_plans
+set limits = jsonb_set(jsonb_set(limits, '{active_members}', '1'::jsonb), '{staff}', '1'::jsonb)
+where key='gym_starter';
+
+do $capacity$
+begin
+  begin
+    insert into public.contacts (tenant_id,full_name,type)
+    values ('20000000-0000-0000-0000-000000000001','Over limit member','member');
+    raise exception 'member capacity limit was bypassed';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.tenant_users (tenant_id,user_id,role_id,full_name,email)
+    select '20000000-0000-0000-0000-000000000001',
+      '10000000-0000-0000-0000-000000000002',r.id,'Over limit staff','staff@example.test'
+    from public.roles r where r.tenant_id is null and r.key='operator';
+    raise exception 'staff capacity limit was bypassed';
+  exception when check_violation then null;
+  end;
+end
+$capacity$;
 
 select 'NOVAGRID migration and security smoke tests passed' as result;
