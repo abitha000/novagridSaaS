@@ -102,7 +102,7 @@ const pending=await fetch(base+`/rest/v1/organisations?id=eq.${orgId}&select=app
 const pendingRows=await pending.json();
 assert(pending.ok&&pendingRows.length===1&&pendingRows[0].approval_status==="pending","New organisation should remain pending before platform approval");
 await rpc(adminToken,"decide_organisation_approval",{p_org:orgId,p_decision:"approved",p_category_key:"gym",p_reason:null});
-const approved=await fetch(base+`/rest/v1/organisations?id=eq.${orgId}&select=approval_status,lifecycle_status`,{headers:{apikey:anon,Authorization:`Bearer ${staffAdminToken}`}});
+const approved=await fetch(base+`/rest/v1/organisations?id=eq.${orgId}&select=approval_status,lifecycle_status`,{headers:{apikey:anon,Authorization:`Bearer ${adminToken}`}});
 const approvedRows=await approved.json();
 assert(approved.ok&&approvedRows.length===1&&approvedRows[0].approval_status==="approved","Platform approval did not update organisation");
 const beforeActivation=await fetch(base+`/rest/v1/subscriptions?organisation_id=eq.${orgId}&select=id`,{headers:{apikey:anon,Authorization:`Bearer ${adminToken}`}});
