@@ -168,5 +168,13 @@ join public.subscription_plans p on p.key = e.plan_key
 join public.module_catalogue m on m.key = e.module_key
 on conflict (plan_id, module_id) do update set features = excluded.features;
 
--- This catalogue is platform configuration. RLS and platform-only write policies are
--- established in the core security migration; no tenant receives write access here.
+-- Add-on catalogue is visible to signed-in organisation users, but only platform service
+-- operations can modify commercial pricing.
+alter table public.subscription_addon_catalogue enable row level security;
+alter table public.subscription_addon_catalogue force row level security;
+revoke all on public.subscription_addon_catalogue from anon, authenticated;
+grant select on public.subscription_addon_catalogue to authenticated;
+create policy subscription_addon_catalogue_read
+  on public.subscription_addon_catalogue for select to authenticated
+  using (active or private.is_platform_user());
+
