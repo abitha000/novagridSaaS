@@ -3,7 +3,7 @@ import * as I from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { getMySubscription } from '../lib/api/organisations'
 import { deleteTenantFile, getExtraStorageGb, listTenantFiles, openTenantFile, uploadTenantFile, type TenantFile } from '../lib/api/storage'
-import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skel, useToast } from '../ui'
+import { Badge, Button, Card, EmptyState, PageHeader, Skel, useToast } from '../ui'
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return bytes + ' B'
@@ -78,7 +78,7 @@ export function FilesPage() {
 
   return <>
     <PageHeader title="Files & storage" sub="Private documents for this organisation. Files are never publicly accessible." actions={<Button variant="secondary" size="sm" icon={<I.RefreshCw size={14} />} onClick={() => setAttempt(v => v + 1)} disabled={loading || uploading}>Refresh</Button>} />
-    {error && <div className="mb-4"><ErrorState onRetry={() => setAttempt(v => v + 1)} /></div>}
+    {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"><div className="flex items-start justify-between gap-3"><span>{error}</span><Button size="sm" variant="secondary" onClick={() => setAttempt(v => v + 1)}>Retry</Button></div></div>}
     <Card className="p-5 mb-4">
       <div className="flex flex-wrap justify-between items-start gap-3">
         <div><div className="text-sm font-semibold">Storage usage</div><div className="mt-1 text-2xl font-bold">{formatBytes(usedBytes)} <span className="text-sm font-normal text-ng-mute">of {limitBytes ? formatBytes(limitBytes) : 'no active allowance'}</span></div></div>
