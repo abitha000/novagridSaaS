@@ -2,7 +2,7 @@
 
 ## Current state
 
-- Repository branch: `fix/initial-supabase-migrations`
+- Repository branch: `fix/novagrid-migrations-clean-pr`
 - The ordered NOVAGRID migrations are in `supabase/migrations/` and are now in the standard Supabase CLI migration directory.
 - The original `supabase/proposed-migrations/` files are retained as historical drafts; do not apply those.
 - The existing Supabase project currently has only the Figma KV scaffold migration/table. These NOVAGRID migrations have **not** been applied to the live project.
@@ -27,7 +27,7 @@
 2. Review the generated schema and run the RLS isolation tests (see below). The repo's original proposed migrations are not a substitute for tests.
 3. Confirm `private` is not an exposed PostgREST schema. The frontend must use only the anon/publishable key; never put the service-role key in Vite variables.
 4. Confirm the first platform administrator is created deliberately through a trusted admin-only operation. Do not expose a public signup path for platform admins.
-5. Replace sample plan prices before commercial launch. Seeded plans are marked `is_sample = true`.
+5. Gym and Education launch prices in migration 0010 are proposed rates (`is_sample = false`), and must be commercially validated before accepting real payments.
 6. Only after staging passes, take a backup and apply to production in order.
 
 ## CLI workflow
@@ -58,7 +58,7 @@ Use `--dry-run` only if supported by the installed CLI version. Check the curren
 
 ## Known limitations / follow-up migrations
 
-These migrations establish the control plane, tenant core, security policies, consent ledger, and notification persistence. They do not implement provider dispatch, WhatsApp/SMS/email webhooks, payment gateway integration, subscription lifecycle jobs, quota enforcement, storage documents, or Gym/Education domain tables. Those remain later phases. The invitation Edge Function is still a draft and must be reviewed, secured, and tested before deployment.
+These migrations establish the control plane, tenant core, security policies, consent ledger, notification persistence, and proposed Gym/Education pricing catalogue. They do not implement provider dispatch, WhatsApp/SMS/email webhooks, payment gateway integration, subscription lifecycle jobs, quota enforcement, storage documents, or Gym/Education domain tables. Those remain later phases. The invitation Edge Function is still a draft and must be reviewed, secured, and tested before deployment.
 
 
 ## Initial commercial pricing catalogue (migration 0010)
