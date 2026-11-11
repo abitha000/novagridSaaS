@@ -17,7 +17,9 @@ declare
   current_count bigint;
   current_status text;
 begin
-  tenant := case when tg_table_name = 'tenant_users' then new.tenant_id else new.tenant_id end;
+  tenant := new.tenant_id;
+  -- Serialize capacity checks per organisation so concurrent inserts cannot exceed limits.
+  perform 1 from public.organisations where id = tenant for update;
 
   select s.status, p.limits, c.key
     into current_status, plan_limits, industry_key
@@ -33,6 +35,14 @@ begin
   limit 1;
 
   if plan_limits is null then
+    -- Registration creates the first owner membership before a trial is assigned.
+    -- Permit only that initial owner row; all subsequent staff/contacts remain blocked.
+    if tg_table_name = 'tenant_users' and tg_op = 'INSERT'
+       and new.status = 'active'
+       and exists (select 1 from public.roles r where r.id = new.role_id and r.key = 'owner' and r.tenant_id is null)
+       and not exists (select 1 from public.tenant_users tu where tu.tenant_id = tenant) then
+      return new;
+    end if;
     raise exception 'an eligible subscription is required before adding records' using errcode = '23514';
   end if;
 
