@@ -6,7 +6,7 @@ This is a one-time, operator-controlled action. It is deliberately not exposed a
 
 1. Review the production rollout gates in [the pre-production security review](11-preproduction-security-review-and-rollout-gate.md).
 2. Apply the reviewed NOVAGRID migrations to the intended Supabase project in order, during an approved rollout window with a verified backup.
-3. Confirm `public.novagrid_schema_version()` returns `10`.
+3. Confirm `public.novagrid_schema_version()` returns `11`.
 4. Create the intended administrator account through Supabase Auth.
 5. Verify the account's email in Supabase Auth.
 6. Copy that Auth user's UUID from the Supabase Dashboard.
