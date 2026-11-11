@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth } from '../lib/auth'
-import { decideApproval, listOrganisationsAdmin, listSubscriptionsAdmin } from '../lib/api/organisations'
+import { assignSubscription, decideApproval, listIndustryPlans, listOrganisationsAdmin, listSubscriptionsAdmin } from '../lib/api/organisations'
 import { approvals, industries, months, orgGrowth, orgs, planTiers, industryPlanTiers, revenue, inr, type Org } from '../data'
 import { AreaChart, Avatar, Badge, BarChart, Button, Card, CardHeader, Confirm, DataTable, Donut, Dropdown, EmptyState, ErrorState, Field, Logo, Modal, PageHeader, SearchBox, Select, Stat, Status, Tabs, Textarea, Toggle, cx, useFakeLoad, useToast, Skel } from '../ui'
 
@@ -295,19 +295,43 @@ export function SubscriptionsAdmin() {
   const auth = useAuth()
   const [filter, setFilter] = useState('All')
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listSubscriptionsAdmin>>>([])
+  const [organisations, setOrganisations] = useState<Awaited<ReturnType<typeof listOrganisationsAdmin>>>([])
+  const [plans, setPlans] = useState<Awaited<ReturnType<typeof listIndustryPlans>>>([])
+  const [selectedOrg, setSelectedOrg] = useState('')
+  const [selectedPlan, setSelectedPlan] = useState('')
+  const [days, setDays] = useState('14')
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const toast = useToast()
 
   useEffect(() => {
     let alive = true
     setLoading(true)
-    listSubscriptionsAdmin()
-      .then((data) => { if (alive) { setRows(data); setError(null) } })
-      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'Could not load subscriptions') })
+    Promise.all([listSubscriptionsAdmin(), listOrganisationsAdmin()])
+      .then(([subs, orgs]) => {
+        if (!alive) return
+        setRows(subs)
+        setOrganisations(orgs.filter((o) => o.approval_status === 'approved' && o.lifecycle_status !== 'suspended'))
+        setError(null)
+      })
+      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'Could not load subscription data') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [attempt, auth.session?.user.id])
+
+  const chosenOrg = organisations.find((o) => o.id === selectedOrg)
+  useEffect(() => {
+    let alive = true
+    setPlans([])
+    setSelectedPlan('')
+    if (!chosenOrg?.industry?.key) return
+    listIndustryPlans(chosenOrg.industry.key)
+      .then((data) => { if (alive) setPlans(data) })
+      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'Could not load category plans') })
+    return () => { alive = false }
+  }, [chosenOrg?.id, chosenOrg?.industry?.key])
 
   const visible = rows.filter((r) => filter === 'All' || r.status.toLowerCase() === filter.toLowerCase())
   const counts = {
@@ -315,14 +339,45 @@ export function SubscriptionsAdmin() {
     trial: rows.filter((r) => r.status === 'trial').length,
     attention: rows.filter((r) => ['grace', 'read_only', 'suspended', 'expired'].includes(r.status)).length,
   }
+  const startTrial = async () => {
+    if (!chosenOrg || !selectedPlan) { toast('Choose an approved organisation and a plan.', 'error'); return }
+    const duration = Number(days)
+    if (!Number.isInteger(duration) || duration < 1 || duration > 30) { toast('Trial duration must be between 1 and 30 days.', 'error'); return }
+    if (rows.some((r) => r.organisation?.id === chosenOrg.id && ['trial','active','grace','read_only'].includes(r.status))) {
+      toast('This organisation already has a current subscription. No change was made.', 'error')
+      return
+    }
+    setSaving(true)
+    try {
+      await assignSubscription(chosenOrg.id, selectedPlan, 'trial', new Date(Date.now() + duration * 86400000).toISOString())
+      toast('Trial assigned successfully.')
+      setSelectedOrg('')
+      setSelectedPlan('')
+      setAttempt((v) => v + 1)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Trial could not be assigned.', 'error')
+    } finally { setSaving(false) }
+  }
+
   return (
     <>
-      <PageHeader title="Subscriptions" sub="Live subscription records from the NOVAGRID database. Payment processing and automatic renewals are not connected." actions={<Badge tone="warn">Manual administration only</Badge>} />
+      <PageHeader title="Subscriptions" sub="Live subscription records. Trial assignment is manual; paid activation and renewals require verified payment events." actions={<Badge tone="warn">Paid activation disabled</Badge>} />
       <div className="grid sm:grid-cols-3 gap-4 mb-4">
         <Stat label="Active" value={String(counts.active)} icon={<I.CircleCheck size={18} />} />
         <Stat label="Trial" value={String(counts.trial)} icon={<I.Clock size={18} />} />
         <Stat label="Needs attention" value={String(counts.attention)} icon={<I.AlertTriangle size={18} />} />
       </div>
+      <Card className="p-5 mb-4">
+        <div className="font-semibold">Assign a free trial</div>
+        <p className="mt-1 text-sm text-ng-mute">Only approved, non-suspended organisations and plans from their approved industry are eligible. This does not activate a paid plan.</p>
+        <div className="mt-4 grid md:grid-cols-4 gap-3 items-end">
+          <Field label="Organisation"><Select value={selectedOrg} onChange={(e) => setSelectedOrg(e.target.value)}><option value="">Select organisation</option>{organisations.map((o) => <option key={o.id} value={o.id}>{o.name} · {o.industry?.name ?? 'Unknown industry'}</option>)}</Select></Field>
+          <Field label="Industry plan"><Select value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)} disabled={!chosenOrg || plans.length === 0}><option value="">Select trial plan</option>{plans.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}</Select></Field>
+          <Field label="Trial duration (days)"><Select value={days} onChange={(e) => setDays(e.target.value)}>{['7','14','30'].map((d) => <option key={d} value={d}>{d} days</option>)}</Select></Field>
+          <Button onClick={() => void startTrial()} loading={saving} disabled={saving || loading || !selectedOrg || !selectedPlan}>Assign trial</Button>
+        </div>
+        {organisations.length === 0 && !loading && <p className="mt-3 text-xs text-ng-mute">No approved organisations are currently eligible.</p>}
+      </Card>
       <Card>
         <div className="p-4 border-b border-ng-line flex flex-wrap items-center gap-3">
           <Select className="sm:!w-48" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Subscription status">
@@ -332,7 +387,7 @@ export function SubscriptionsAdmin() {
           <Button size="sm" variant="secondary" onClick={() => setAttempt((v) => v + 1)} disabled={loading}><I.RefreshCw size={15} /> Refresh</Button>
         </div>
         {error ? <ErrorState onRetry={() => setAttempt((v) => v + 1)} /> : (
-          <DataTable loading={loading} rows={visible} empty={<EmptyState title="No subscription records" body="Subscriptions will appear here after an approved organisation receives a trial or a verified subscription assignment." />} cols={[
+          <DataTable loading={loading} rows={visible} empty={<EmptyState title="No subscription records" body="Subscriptions will appear here after an approved organisation receives a trial." />} cols={[
             { key: 'organisation', header: 'Organisation', mobile: 'title', render: (r) => <div><div className="font-medium">{r.organisation?.name ?? 'Unknown organisation'}</div><div className="text-xs text-ng-mute">{r.organisation?.industry?.name ?? 'Industry unavailable'}</div></div> },
             { key: 'plan', header: 'Plan', render: (r) => <div><div className="font-medium">{r.plan?.name ?? 'Plan unavailable'}</div><div className="text-xs text-ng-mute">{r.plan?.key ?? ''}</div></div> },
             { key: 'status', header: 'Status', render: (r) => <Status value={r.status} /> },
@@ -341,7 +396,7 @@ export function SubscriptionsAdmin() {
           ]} />
         )}
       </Card>
-      <p className="mt-3 text-xs text-ng-mute">This screen is read-only. It does not activate paid plans, charge customers, extend subscriptions or alter entitlements. Use a verified payment workflow before enabling paid activation.</p>
+      <p className="mt-3 text-xs text-ng-mute">Paid activation, payment capture, period extensions and entitlement changes are not exposed here. The database RPC remains authoritative for platform role, approval, category matching and duplicate-current-subscription checks.</p>
     </>
   )
 }
