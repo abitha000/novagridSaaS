@@ -53,3 +53,21 @@ export const setSuspension = (org: string, suspend: boolean, reason?: string) =>
 
 export const assignSubscription = (org: string, planKey: string, status: 'trial' | 'active', periodEnd: string) =>
   run(supabase.rpc('assign_subscription', { p_org: org, p_plan_key: planKey, p_status: status, p_period_end: periodEnd }))
+
+
+export type SubscriptionAdminRow = {
+  id: string
+  status: 'trial' | 'active' | 'grace' | 'read_only' | 'suspended' | 'cancelled' | 'expired'
+  period_start: string
+  period_end: string
+  organisation: { id: string; name: string; approval_status: string; lifecycle_status: string; industry: { key: string; name: string } | null }
+  plan: { key: string; name: string; price_inr_monthly: number; price_inr_yearly: number } | null
+}
+
+/** Platform-only subscription list. RLS and platform role checks remain authoritative. */
+export const listSubscriptionsAdmin = () =>
+  run<SubscriptionAdminRow[]>(
+    supabase.from('subscriptions')
+      .select('id,status,period_start,period_end,organisation:organisations(id,name,approval_status,lifecycle_status,industry:industry_categories(key,name)),plan:subscription_plans(key,name,price_inr_monthly,price_inr_yearly)')
+      .order('created_at', { ascending: false }) as never,
+  )
