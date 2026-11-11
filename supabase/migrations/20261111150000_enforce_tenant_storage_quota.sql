@@ -15,7 +15,7 @@ as $$
 declare
   tenant uuid;
   plan_limits jsonb;
-  subscription_id uuid;
+  v_subscription_id uuid;
   base_limit_bytes bigint;
   addon_limit_bytes bigint := 0;
   current_usage_bytes bigint := 0;
@@ -44,7 +44,7 @@ begin
   end if;
 
   select s.id, p.limits
-    into subscription_id, plan_limits
+    into v_subscription_id, plan_limits
   from public.subscriptions s
   join public.subscription_plans p on p.id = s.plan_id
   join public.organisations o on o.id = s.organisation_id
@@ -56,7 +56,7 @@ begin
   order by s.created_at desc
   limit 1;
 
-  if subscription_id is null then
+  if v_subscription_id is null then
     raise exception 'an eligible subscription is required to upload files' using errcode = '23514';
   end if;
 
@@ -69,7 +69,7 @@ begin
   from public.subscription_addons a
   join public.subscription_addon_catalogue c
     on c.addon_key = a.addon_key and c.active
-  where a.subscription_id = subscription_id
+  where a.v_subscription_id = v_subscription_id
     and a.addon_key = 'extra_storage';
 
   -- Security-definer execution can see the full bucket usage, independent of caller RLS.
