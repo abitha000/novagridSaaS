@@ -10,11 +10,26 @@ create table public.roles (
   created_at timestamptz not null default now(),
   unique (tenant_id, id)
 );
-create unique index roles_key_unique on public.roles (coalesce(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), key);
+-- Separate partial indexes avoid a magic-UUID sentinel for global roles.
+create unique index roles_system_key_unique on public.roles (key) where tenant_id is null;
+create unique index roles_tenant_key_unique on public.roles (tenant_id, key) where tenant_id is not null;
+
+-- A role's tenant ownership is immutable after creation. This closes the concurrent reassignment
+-- window between staff membership validation and role ownership changes.
+create or replace function private.prevent_role_tenant_reassignment() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.tenant_id is distinct from old.tenant_id then
+    raise exception 'role tenant ownership is immutable' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger roles_tenant_immutable before update of tenant_id on public.roles
+for each row execute function private.prevent_role_tenant_reassignment();
 
 create table public.permissions (
   id uuid primary key default gen_random_uuid(),
-  key text not null unique check (key ~ '^[a-z_]+\.[a-z_]+$'),
+  key text not null unique check (key ~ '^[a-z_]+[.][a-z_]+$'),
   module_key text not null,
   action text not null
 );
@@ -44,7 +59,7 @@ create index on public.tenant_users (user_id);
 
 -- A staff membership may use a global system role or a role owned by that same tenant only.
 create or replace function private.enforce_tenant_role_scope() returns trigger
-language plpgsql set search_path = '' as $
+language plpgsql set search_path = '' as $$
 declare v_role_tenant uuid;
 begin
   select tenant_id into v_role_tenant from public.roles where id = new.role_id;
@@ -55,7 +70,7 @@ begin
     raise exception 'staff role belongs to a different organisation' using errcode = '23514';
   end if;
   return new;
-end $;
+end $$;
 create trigger tenant_users_role_scope
 before insert or update of tenant_id, role_id on public.tenant_users
 for each row execute function private.enforce_tenant_role_scope();
@@ -66,16 +81,27 @@ create or replace function private.protect_last_owner() returns trigger language
 declare owner_role uuid; remaining int;
 begin
   -- allow cascades from deleting the whole organisation
-  if tg_op = 'DELETE' and not exists (select 1 from public.organisations where id = old.tenant_id) then return old; end if;
+  if tg_op = 'DELETE' then
+    if not exists (select 1 from public.organisations where id = old.tenant_id) then return old; end if;
+  end if;
+  -- Serialize owner removals/role changes per organisation to prevent concurrent transactions
+  -- from both observing another owner and leaving the organisation ownerless.
+  perform 1 from public.organisations where id = old.tenant_id for update;
   select id into owner_role from public.roles where tenant_id is null and key = 'owner';
-  if old.role_id = owner_role and old.status = 'active'
-     and (tg_op = 'DELETE' or (new.role_id is distinct from owner_role or new.status is distinct from 'active')) then
-    select count(*) into remaining from public.tenant_users
-      where tenant_id = old.tenant_id and role_id = owner_role and status = 'active' and id <> old.id;
+  if old.role_id = owner_role and old.status = 'active' then
+    if tg_op = 'DELETE' then
+      select count(*) into remaining from public.tenant_users
+        where tenant_id = old.tenant_id and role_id = owner_role and status = 'active' and id <> old.id;
+    elsif new.role_id is distinct from owner_role or new.status is distinct from 'active' then
+      select count(*) into remaining from public.tenant_users
+        where tenant_id = old.tenant_id and role_id = owner_role and status = 'active' and id <> old.id;
+    else
+      remaining := 1;
+    end if;
     if remaining = 0 then raise exception 'an organisation must keep at least one active owner' using errcode = '23514'; end if;
   end if;
   if tg_op = 'DELETE' then return old; else return new; end if;
-end $;
+end $$;
 create trigger tenant_users_last_owner before update or delete on public.tenant_users for each row execute function private.protect_last_owner();
 
 create table public.contacts (
@@ -83,8 +109,8 @@ create table public.contacts (
   tenant_id uuid not null references public.organisations(id) on delete cascade,
   type text not null default 'person',                     -- member, student, parent, patient, guest ...
   full_name text not null check (char_length(full_name) between 2 and 160),
-  phone_e164 text check (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
-  email text check (email ~ '^\S+@\S+\.\S+$'),
+  phone_e164 text check (phone_e164 ~ '^[+][1-9][0-9]{7,14}$'),
+  email text check (email ~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'),
   attributes jsonb not null default '{}',
   status text not null default 'active' check (status in ('active','inactive')),
   created_by uuid references auth.users(id) default auth.uid(),

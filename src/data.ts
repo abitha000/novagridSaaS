@@ -46,6 +46,20 @@ export const planTiers = [
   { key: 'pro', name: 'Professional', m: 4999, y: 47990, blurb: 'Automation, roles and deeper analytics.', limits: ['50 staff', '10,000 contacts', '10,000 messages / mo', '20 GB storage', 'Workflow automation', 'Audit logs'], cta: 'Choose Professional', featured: true },
   { key: 'ent', name: 'Enterprise', m: 0, y: 0, blurb: 'Custom limits, white-label and priority support.', limits: ['Custom staff & contacts', 'White-label included', 'Dedicated success manager', 'SSO & custom retention'], cta: 'Talk to sales' },
 ]
+
+export const industryPlanTiers = {
+  gym: [
+    { key: 'gym_starter', name: 'Starter', m: 799, y: 7990, limits: ['100 active members', '2 staff accounts', 'Attendance & memberships', 'Basic reports'] },
+    { key: 'gym_growth', name: 'Growth', m: 1499, y: 14990, limits: ['300 active members', '5 staff accounts', 'Trainer & renewal management', 'Automated reminders', 'Advanced reports'] },
+    { key: 'gym_pro', name: 'Pro', m: 2499, y: 24990, limits: ['1,000 active members', '15 staff accounts', 'All Gym modules', 'Workflow automation', 'Audit logs & exports'] },
+  ],
+  education: [
+    { key: 'education_starter', name: 'Starter', m: 1499, y: 14990, limits: ['200 active students', '5 staff accounts', 'Attendance & fee tracking', 'Basic reports'] },
+    { key: 'education_growth', name: 'Growth', m: 2999, y: 29990, limits: ['750 active students', '15 staff accounts', 'Bus & transport management', 'Timetables', 'Advanced reports'] },
+    { key: 'education_pro', name: 'Pro', m: 5999, y: 59990, limits: ['2,000 active students', '40 staff accounts', 'All Education modules', 'Examinations & automation', 'Audit logs & exports'] },
+  ],
+} as const
+
 export const inr = (n: number) => '₹' + n.toLocaleString('en-IN')
 
 export const faqs = [

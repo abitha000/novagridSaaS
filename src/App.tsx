@@ -108,7 +108,7 @@ function Routes() {
       : s === 'reports' ? <ReportsPage />
       : s === 'automation' ? <AutomationPage ind={ind} />
       : s === 'settings' ? <SettingsPage ind={ind} />
-      : s === 'billing' ? <BillingPage />
+      : s === 'billing' ? <BillingPage ind={ind as 'gym' | 'education'} />
       : <NotFound />
     page = <Gate kind="app" ind={ind}><WorkspaceLayout ind={ind} path={path}>{body}</WorkspaceLayout></Gate>
   } else if (parts[0] === 'design') {

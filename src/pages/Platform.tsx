@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth } from '../lib/auth'
-import { approvals, industries, months, orgGrowth, orgs, planTiers, revenue, inr, type Org } from '../data'
+import { approvals, industries, months, orgGrowth, orgs, planTiers, industryPlanTiers, revenue, inr, type Org } from '../data'
 import { AreaChart, Avatar, Badge, BarChart, Button, Card, CardHeader, Confirm, DataTable, Donut, Dropdown, EmptyState, ErrorState, Field, Logo, Modal, PageHeader, SearchBox, Select, Stat, Status, Tabs, Textarea, Toggle, cx, useFakeLoad, useToast, Skel } from '../ui'
 
 const items = [
@@ -243,13 +243,23 @@ export function SubscriptionsAdmin() {
 
 export function PlansAdmin() {
   const toast = useToast()
+  const plans = [
+    ...industryPlanTiers.gym.map((p) => ({ ...p, industry: 'Gym & Fitness' })),
+    ...industryPlanTiers.education.map((p) => ({ ...p, industry: 'Education' })),
+  ]
   return (
     <>
-      <PageHeader title="Plans & pricing" sub="Sample prices in INR. Replace with commercial rates before launch." actions={<Button icon={<I.Plus size={16} />}>New plan</Button>} />
-      <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {planTiers.map((p, i) => <Card key={p.key} hover className="p-5 animate-rise" style={{ animationDelay: i * 70 + 'ms' }}><div className="flex justify-between"><h3 className="font-semibold">{p.name}</h3><Badge tone="neutral">Sample</Badge></div><div className="text-2xl font-bold mt-3">{p.key === 'ent' ? 'Custom' : inr(p.m)}<span className="text-sm text-ng-mute font-normal">{p.key !== 'ent' && ' /mo'}</span></div><ul className="mt-4 space-y-1.5 text-sm text-ng-mute">{p.limits.map((l) => <li key={l}>• {l}</li>)}</ul><Button variant="secondary" size="sm" className="mt-5 w-full" onClick={() => toast(`Editing ${p.name} (prototype)`, 'info')}>Edit plan</Button></Card>)}
+      <PageHeader title="Plans & pricing" sub="Initial proposed India launch prices. Messaging delivery charges are billed separately." actions={<Badge tone="warn">Commercial review required</Badge>} />
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {plans.map((p, i) => <Card key={p.key} hover className="p-5 animate-rise" style={{ animationDelay: i * 70 + 'ms' }}>
+          <div className="flex justify-between items-start gap-2"><div><h3 className="font-semibold">{p.name}</h3><div className="text-xs text-ng-mute mt-1">{p.industry}</div></div><Badge tone="neutral">Proposed</Badge></div>
+          <div className="text-2xl font-bold mt-3">{inr(p.m)}<span className="text-sm text-ng-mute font-normal"> /mo</span></div>
+          <div className="text-xs text-ng-mute">{inr(p.y)} billed annually · two months' discount</div>
+          <ul className="mt-4 space-y-1.5 text-sm text-ng-mute">{p.limits.map((l) => <li key={l}>• {l}</li>)}</ul>
+          <Button variant="secondary" size="sm" className="mt-5 w-full" onClick={() => toast(`Pricing for ${p.industry} · ${p.name} is configured in the database migration; live editing will be enabled through the secured platform API.`, 'info')}>View plan configuration</Button>
+        </Card>)}
       </div>
-      <Card className="mt-4 p-5 text-sm"><b>Rule:</b> plans only enable features and limits inside the modules that belong to an organisation's approved category. A plan upgrade never unlocks another industry's modules.</Card>
+      <Card className="mt-4 p-5 text-sm"><b>Commercial rules:</b> Each organisation selects plans only within its approved industry. Student/member and staff limits are enforced by backend entitlements. WhatsApp and SMS provider charges are separate usage-based costs; never promise unlimited delivery.</Card>
     </>
   )
 }
