@@ -30,5 +30,5 @@ export const supabase = createClient(url, anonKey, {
 })
 
 /** Bump together with the last file in supabase/proposed-migrations. */
-export const REQUIRED_SCHEMA_VERSION = 8
+export const REQUIRED_SCHEMA_VERSION = 10
 export const supabaseProjectRef = projectId
