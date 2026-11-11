@@ -393,7 +393,7 @@ export function RegisterPage() {
   const startLive = async () => {
     setBusy(true)
     try {
-      const input = { name: f.org, ownerName: f.owner, phone: f.phone, address: f.address, country: f.country, state: f.state, city: f.city, categoryKey: industries.find((i) => i.name === f.industry)?.key ?? 'education', orgType: f.type, planKey: planTiers.find((p) => p.name === f.plan)?.key ?? 'trial' }
+      const input = { name: f.org.trim(), ownerName: f.owner.trim(), phone: f.phone.replace(/[\s()-]/g, ''), address: f.address.trim(), country: f.country, state: f.state.trim(), city: f.city.trim(), categoryKey: industries.find((i) => i.name === f.industry)?.key ?? 'education', orgType: f.type, planKey: planTiers.find((p) => p.name === f.plan)?.key ?? 'trial' }
       const r = await auth.signUp(f.email.trim(), f.password, { token: crypto.randomUUID(), input })
       setSent(r.needsEmailConfirmation)
       setStep(3)
@@ -404,14 +404,28 @@ export function RegisterPage() {
     }
   }
   const next = () => {
-    if (live && step === 1 && f.password.length < 8) return setErr('Choose a password of at least 8 characters.')
-    if (live && step === 2) { setErr(''); return void startLive() }
-    if (live && step === 3) return go('/login')
-    if (step === 0 && (!f.org || !f.city)) return setErr('Organisation name and city are required.')
-    if (step === 1 && (!/^\S+@\S+\.\S+$/.test(f.email) || f.phone.length < 8)) return setErr('Enter a valid email and phone number.')
-    if (!live && step === 3 && otp.join('').length < 6) return setErr('Enter the 6-digit code we sent you.')
     setErr('')
-    if (step === 3) { setBusy(true); return void setTimeout(() => { setBusy(false); setStep(4) }, 900) }
+    if (step === 0) {
+      if (f.org.trim().length < 2) return setErr('Enter an organisation name with at least 2 characters.')
+      if (f.city.trim().length < 2) return setErr('Enter your organisation city.')
+      if (f.state.trim().length < 2) return setErr('Enter your state.')
+    }
+    if (step === 1) {
+      if (f.owner.trim().length < 2) return setErr('Owner full name is required.')
+      if (!/^\S+@\S+\.\S+$/.test(f.email.trim())) return setErr('Enter a valid work email address.')
+      const normalizedPhone = f.phone.replace(/[\s()-]/g, '')
+      if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) return setErr('Enter a valid phone number in international format, e.g. +919876543210.')
+      if (live && f.password.length < 8) return setErr('Choose a password of at least 8 characters.')
+    }
+    if (step === 2) {
+      if (!f.industry || !industries.some((i) => i.name === f.industry)) return setErr('Select a valid industry category.')
+      if (!f.type.trim()) return setErr('Enter your organisation type.')
+      if (!planTiers.some((p) => p.name === f.plan)) return setErr('Select a valid preferred plan.')
+      if (live) return void startLive()
+    }
+    if (live && step === 3) return go('/login')
+    if (!live && step === 3 && otp.join('').length !== 6) return setErr('Enter the 6-digit code we sent you.')
+    if (!live && step === 3) { setBusy(true); return void setTimeout(() => { setBusy(false); setStep(4) }, 900) }
     setStep(step + 1)
   }
   const light = '[&_span]:!text-white/80'
