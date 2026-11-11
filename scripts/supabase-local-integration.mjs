@@ -40,10 +40,12 @@ assert(b.length===1&&b[0].full_name==="Tenant B Contact","Tenant B did not see e
 console.log("PASS Auth: both disposable users created and signed in");
 console.log("PASS PostgREST RLS: each tenant sees only its own contact");
 
-const anonRows=await fetch(base+"/rest/v1/organisations?select=id",{headers:{apikey:anon}});
-const anonData=await anonRows.json();
-assert(anonRows.ok&&Array.isArray(anonData)&&anonData.length===0,"Anonymous organisation access is not isolated");
-console.log("PASS Anonymous PostgREST: no organisation rows exposed");
+const anonRows=await fetch(base+"/rest/v1/organisations?select=id",{headers:{apikey:anon,Authorization:`Bearer ${anon}`}});
+const anonRaw=await anonRows.text();
+let anonData=null; try{anonData=anonRaw?JSON.parse(anonRaw):null}catch{}
+assert((anonRows.ok&&Array.isArray(anonData)&&anonData.length===0)||[401,403].includes(anonRows.status),
+ "Anonymous organisation access is not isolated: "+anonRows.status+" "+anonRaw.slice(0,250));
+console.log("PASS Anonymous PostgREST: organisation rows are inaccessible or empty");
 
 async function storageUpload(token,tenant,path,expectOk){
  const r=await fetch(base+`/storage/v1/object/novagrid-files/${tenant}/files/${path}`,{
