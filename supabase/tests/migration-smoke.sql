@@ -284,7 +284,7 @@ reset role;
 
 
 
-// Storage read isolation and mutation lifecycle checks. The test-only Storage
+-- Storage read isolation and mutation lifecycle checks. The test-only Storage
 // fixture validates SQL policy behavior; it is not a substitute for testing
 // the real Supabase Storage API and signed-URL flow.
 reset role;
