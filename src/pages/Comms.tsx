@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as I from 'lucide-react'
 import { Avatar, Badge, Button, Card, CardHeader, Chips, Confirm, DataTable, EmptyState, Field, Input, Modal, PageHeader, SearchBox, Select, Status, Tabs, Textarea, Toggle, cx, useFakeLoad, useToast } from '../ui'
 import { students } from '../data'
 import type { Ind } from './Workspace'
+import { useLiveTenant } from '../lib/auth'
+import { createTemplate, listNotifications, listRecipients, listTemplates } from '../lib/api/notifications'
+import type { NotificationRow, RecipientRow, Template } from '../lib/api/types'
+import { errorMessage } from '../lib/api/errors'
 
 type Channel = 'WhatsApp' | 'SMS' | 'Email'
 const templates = [
@@ -29,7 +33,9 @@ const scripts: Record<string, string[]> = {
 const kind = (i: number) => (i === 9 ? 'fail' : i === 21 ? 'fail' : i === 14 ? 'retry' : i % 3 === 0 ? 'read' : 'ok')
 
 export function CommsPage({ ind, audience }: { ind: Ind; audience?: string }) {
+  const tenantId = useLiveTenant()
   const [tab, setTab] = useState('compose')
+  if (tenantId) return <LiveComms tenantId={tenantId} />
   return (
     <>
       <PageHeader title="Communications" sub="Every message is delivered individually. Recipients never see each other." />
@@ -165,4 +171,111 @@ function Prefs() {
       {list.length === 0 ? <EmptyState title="No recipients found" body="Try another name." /> : <div className="divide-y divide-ng-line">{list.map((n) => <div key={n} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3"><div className="flex items-center gap-3 flex-1"><Avatar name={n} /><span className="font-medium">{n}</span></div><div className="flex gap-5">{['WhatsApp', 'SMS', 'Email'].map((c) => { const k = n + c; const on = p[k] ?? !(n === 'Sunita Malhotra' && c !== 'Email'); return <label key={c} className="flex items-center gap-2 text-sm text-ng-mute">{c}<Toggle on={on} label={`${c} for ${n}`} onChange={(v) => setP({ ...p, [k]: v })} /></label> })}</div></div>)}</div>}
     </Card>
   )
+}
+
+
+/* ---------------- Communications (live, tenant-scoped; no dispatch) ---------------- */
+function LiveComms({ tenantId }: { tenantId: string }) {
+  const [tab, setTab] = useState('history')
+  const [notifications, setNotifications] = useState<NotificationRow[] | null>(null)
+  const [templatesLive, setTemplatesLive] = useState<Template[] | null>(null)
+  const [failed, setFailed] = useState<RecipientRow[] | null>(null)
+  const [selected, setSelected] = useState<NotificationRow | null>(null)
+  const [recipients, setRecipients] = useState<RecipientRow[] | null>(null)
+  const [error, setError] = useState('')
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState<{ name: string; channel: 'whatsapp' | 'sms' | 'email'; body: string; dlt_template_id: string }>({ name: '', channel: 'whatsapp', body: '', dlt_template_id: '' })
+  const toast = useToast()
+
+  const load = useCallback(async () => {
+    setError('')
+    try {
+      const [n, t] = await Promise.all([listNotifications(tenantId), listTemplates(tenantId)])
+      setNotifications(n)
+      setTemplatesLive(t)
+      const recipientSets = await Promise.all(n.map((row) => listRecipients(row.id)))
+      setFailed(recipientSets.flat().filter((r) => r.status === 'failed'))
+    } catch (e) {
+      setError(errorMessage(e))
+      setNotifications([])
+      setTemplatesLive([])
+      setFailed([])
+    }
+  }, [tenantId])
+  useEffect(() => { void load() }, [load])
+
+  const openDetails = async (row: NotificationRow) => {
+    setSelected(row)
+    setRecipients(null)
+    try { setRecipients(await listRecipients(row.id)) }
+    catch (e) { toast(errorMessage(e), 'err'); setRecipients([]) }
+  }
+  const saveTemplate = async () => {
+    setSaving(true)
+    try {
+      await createTemplate(tenantId, { ...draft, dlt_template_id: draft.dlt_template_id || undefined })
+      toast('Draft template saved')
+      setTemplateOpen(false)
+      setDraft({ name: '', channel: 'whatsapp', body: '', dlt_template_id: '' })
+      const rows = await listTemplates(tenantId)
+      setTemplatesLive(rows)
+    } catch (e) { toast(errorMessage(e), 'err') }
+    finally { setSaving(false) }
+  }
+  const moneylessCount = (status: string) => (notifications ?? []).filter(n => n.status === status).length
+
+  return <>
+    <PageHeader title="Communications" sub="Live tenant-scoped campaign history and message templates. Dispatch is not enabled in this screen." actions={<Button variant="secondary" icon={<I.RefreshCw size={15}/>} onClick={() => void load()}>Refresh</Button>} />
+    <Tabs value={tab} onChange={setTab} tabs={[{ id: 'history', label: 'Campaign history', count: notifications?.length ?? 0 }, { id: 'templates', label: 'Templates', count: templatesLive?.length ?? 0 }, { id: 'failed', label: 'Failed recipients', count: failed?.length ?? 0 }]} />
+    {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm p-4">{error}</div>}
+    {tab === 'history' && <div className="mt-5 space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(['queued','scheduled','completed','failed'] as const).map((s) => <Card key={s} className="p-4"><div className="text-xs text-ng-mute capitalize">{s}</div><div className="text-2xl font-bold tabular-nums">{moneylessCount(s)}</div></Card>)}
+      </div>
+      <Card><DataTable loading={notifications === null} rows={notifications ?? []} empty={<EmptyState title="No campaigns yet" body="Campaign records will appear here when a campaign is created through an approved dispatch workflow."/>} cols={[
+        {key:'title',header:'Campaign',mobile:'title',render:r=><button className="font-medium text-left hover:underline cursor-pointer" onClick={() => void openDetails(r)}>{r.title}</button>},
+        {key:'channel',header:'Channel',render:r=>r.channel.toUpperCase()},
+        {key:'recipients',header:'Recipients',render:r=>r.recipient_count.toLocaleString('en-IN')},
+        {key:'status',header:'Status',render:r=><Status value={r.status}/>},
+        {key:'date',header:'Created',render:r=>new Date(r.created_at).toLocaleString('en-IN')},
+        {key:'details',header:'',render:r=><Button size="sm" variant="secondary" onClick={() => void openDetails(r)}>Details</Button>}
+      ]}/></Card>
+    </div>}
+    {tab === 'templates' && <div className="mt-5 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-ng-mute">Templates are stored as drafts until provider approval. Saving a template does not send a message.</p><Button icon={<I.Plus size={16}/>} onClick={() => setTemplateOpen(true)}>New draft template</Button></div>
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {(templatesLive ?? []).map(t => <Card key={t.id} className="p-5"><div className="flex justify-between gap-2"><b>{t.name}</b><Status value={t.provider_status}/></div><Badge tone="neutral" dot={false}>{t.channel.toUpperCase()}</Badge><p className="mt-3 text-sm text-ng-mute whitespace-pre-wrap">{t.body}</p>{t.dlt_template_id && <p className="mt-3 text-xs text-ng-mute">DLT ID: {t.dlt_template_id}</p>}</Card>)}
+        {templatesLive?.length === 0 && <Card className="md:col-span-2 xl:col-span-3"><EmptyState title="No templates yet" body="Create a draft template to begin your organisation's template library."/></Card>}
+      </div>
+    </div>}
+    {tab === 'failed' && <div className="mt-5"><Card><DataTable loading={failed === null} rows={failed ?? []} empty={<EmptyState title="No failed recipients" body="There are no failed recipients in the latest 50 campaign records."/>} cols={[
+      {key:'person',header:'Recipient',mobile:'title',render:r=><span className="font-medium">{r.contact?.full_name ?? 'Contact'}</span>},
+      {key:'channel',header:'Channel',render:r=>r.channel.toUpperCase()},
+      {key:'reason',header:'Reason',render:r=>r.error_code ?? r.skip_reason ?? 'Not provided'},
+      {key:'attempts',header:'Attempts',render:r=>r.attempts},
+      {key:'permanent',header:'Failure',render:r=><Status value={r.is_permanent ? 'Permanent' : 'Retryable'}/>}
+    ]}/></Card></div>}
+    <Modal open={templateOpen} onClose={() => setTemplateOpen(false)} title="Create draft template" footer={<><Button variant="secondary" onClick={() => setTemplateOpen(false)}>Cancel</Button><Button loading={saving} disabled={draft.name.trim().length < 2 || draft.body.trim().length < 5} onClick={() => void saveTemplate()}>Save draft</Button></>}>
+      <div className="space-y-4">
+        <Field label="Template name"><Input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></Field>
+        <Field label="Channel"><Select value={draft.channel} onChange={e=>setDraft({...draft,channel:e.target.value as typeof draft.channel})}><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></Select></Field>
+        <Field label="Message body"><Textarea rows={5} value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})} placeholder="Hello {{name}}, …"/></Field>
+        {draft.channel === 'sms' && <Field label="DLT template ID (optional)"><Input value={draft.dlt_template_id} onChange={e=>setDraft({...draft,dlt_template_id:e.target.value})}/></Field>}
+      </div>
+    </Modal>
+    <Modal open={!!selected} onClose={() => {setSelected(null);setRecipients(null)}} title={selected?.title ?? 'Campaign details'}>
+      {selected && <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3 text-sm"><div><span className="text-ng-mute block text-xs">Channel</span>{selected.channel.toUpperCase()}</div><div><span className="text-ng-mute block text-xs">Status</span><Status value={selected.status}/></div><div><span className="text-ng-mute block text-xs">Recipients</span>{selected.recipient_count}</div><div><span className="text-ng-mute block text-xs">Created</span>{new Date(selected.created_at).toLocaleString('en-IN')}</div></div>
+        <div className="rounded-xl bg-ng-canvas p-3 text-sm whitespace-pre-wrap">{selected.body}</div>
+        <h4 className="font-semibold text-sm">Recipient status</h4>
+        <DataTable loading={recipients === null} rows={recipients ?? []} empty={<EmptyState title="No recipient records" body="No recipients are associated with this campaign."/>} cols={[
+          {key:'name',header:'Recipient',mobile:'title',render:r=>r.contact?.full_name ?? 'Contact'},
+          {key:'channel',header:'Channel',render:r=>r.channel.toUpperCase()},
+          {key:'status',header:'Status',render:r=><Status value={r.status}/>},
+          {key:'updated',header:'Updated',render:r=>new Date(r.updated_at).toLocaleString('en-IN')}
+        ]}/>
+      </div>}
+    </Modal>
+  </>
 }
