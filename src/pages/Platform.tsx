@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth } from '../lib/auth'
+import { decideApproval, listOrganisationsAdmin } from '../lib/api/organisations'
 import { approvals, industries, months, orgGrowth, orgs, planTiers, industryPlanTiers, revenue, inr, type Org } from '../data'
 import { AreaChart, Avatar, Badge, BarChart, Button, Card, CardHeader, Confirm, DataTable, Donut, Dropdown, EmptyState, ErrorState, Field, Logo, Modal, PageHeader, SearchBox, Select, Stat, Status, Tabs, Textarea, Toggle, cx, useFakeLoad, useToast, Skel } from '../ui'
 
@@ -153,64 +154,126 @@ export function OrgProfile({ id }: { id: string }) {
   )
 }
 
+type LiveApprovalOrg = {
+  id: string
+  name: string
+  approval_status: 'pending' | 'approved' | 'rejected'
+  lifecycle_status: string
+  city: string | null
+  created_at: string
+  industry: { key: string; name: string } | null
+}
+
+function approvalDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 export function ApprovalsPage() {
-  const [list, setList] = useState(approvals)
-  const loading = useFakeLoad(600)
-  return (
-    <>
-      <PageHeader title="Approvals" sub="Category approval is separate from subscription activation." />
-      <Card>
-        {loading ? <div className="p-5 space-y-3">{[0, 1, 2].map((i) => <Skel key={i} className="h-16" />)}</div> : list.length === 0 ? <EmptyState icon={<I.PartyPopper size={26} />} title="Queue cleared" body="No organisations are waiting for category approval." action={<Button variant="secondary" onClick={() => setList(approvals)}>Reset demo</Button>} /> : (
-          <div className="divide-y divide-ng-line">
-            {list.map((a, i) => (
-              <button key={a.id} onClick={() => go('/platform/approvals/' + a.id)} style={{ animationDelay: i * 60 + 'ms' }} className="animate-rise w-full flex flex-col sm:flex-row sm:items-center gap-3 p-5 text-left hover:bg-ng-canvas transition cursor-pointer">
-                <div className="flex items-center gap-3 flex-1 min-w-0"><Avatar name={a.org} size={40} /><div className="min-w-0"><div className="font-semibold truncate">{a.org}</div><div className="text-sm text-ng-mute">{a.owner} · {a.city}</div></div></div>
-                <div className="text-sm"><div className="text-ng-mute text-xs">Requested category</div>{a.requested}</div>
-                <Badge tone={a.risk === 'Low' ? 'ok' : a.risk === 'Needs review' ? 'warn' : 'err'}>{a.risk}</Badge>
-                <span className="text-xs text-ng-mute w-24">{a.submitted}</span>
-                <I.ChevronRight className="text-ng-mute hidden sm:block" size={18} />
-              </button>
-            ))}
-          </div>
-        )}
-      </Card>
-    </>
-  )
+  const auth = useAuth()
+  const [rows, setRows] = useState<LiveApprovalOrg[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const live = auth.backend === 'live'
+
+  const refresh = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const all = await listOrganisationsAdmin() as LiveApprovalOrg[]
+      setRows(all.filter((org) => org.approval_status === 'pending'))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load approval queue')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (live && auth.platformRole) void refresh()
+  }, [live, auth.platformRole])
+
+  if (!live) {
+    return <><PageHeader title="Approvals" sub="Sample approval queue · live database schema is not active." />
+      <Card><EmptyState icon={<I.Info size={26} />} title="Demo-only approvals" body="The sample approval actions are not connected to the database. Install the approved NOVAGRID schema to use live approvals." /></Card></>
+  }
+
+  return <>
+    <PageHeader title="Approvals" sub="Live organisation registrations awaiting category approval." actions={<Button variant="secondary" icon={<I.RefreshCw size={16} />} onClick={() => void refresh()} disabled={loading}>Refresh</Button>} />
+    {error && <ErrorState title="Could not load approvals" body={error} action={<Button onClick={() => void refresh()}>Try again</Button>} />}
+    <Card>
+      {loading ? <div className="p-5 space-y-3">{[0,1,2].map((i) => <Skel key={i} className="h-16" />)}</div>
+      : rows.length === 0 ? <EmptyState icon={<I.PartyPopper size={26} />} title="No pending approvals" body="New organisation registrations will appear here after email verification." />
+      : <div className="divide-y divide-ng-line">{rows.map((org) => <button key={org.id} onClick={() => go('/platform/approvals/' + org.id)} className="w-full flex flex-col sm:flex-row sm:items-center gap-3 p-5 text-left hover:bg-ng-canvas transition cursor-pointer">
+        <div className="flex items-center gap-3 flex-1 min-w-0"><Avatar name={org.name} size={40} /><div className="min-w-0"><div className="font-semibold truncate">{org.name}</div><div className="text-sm text-ng-mute">{org.city || 'Location not provided'} · {approvalDate(org.created_at)}</div></div></div>
+        <div className="text-sm"><div className="text-ng-mute text-xs">Requested category</div>{org.industry?.name ?? 'Unassigned'}</div>
+        <Badge tone="warn">Pending</Badge><I.ChevronRight className="text-ng-mute hidden sm:block" size={18} />
+      </button>)}</div>}
+    </Card>
+  </>
 }
 
 export function ApprovalDetail({ id }: { id: string }) {
-  const a = approvals.find((x) => x.id === id) ?? approvals[0]
+  const auth = useAuth()
   const toast = useToast()
-  const [decision, setDecision] = useState<'approve' | 'reject' | 'change' | null>(null)
-  const [done, setDone] = useState<string | null>(null)
-  const [cat, setCat] = useState(a.requested)
+  const [org, setOrg] = useState<LiveApprovalOrg | null>(null)
+  const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
-  const commit = () => {
-    setBusy(true)
-    setTimeout(() => { setBusy(false); setDone(decision === 'approve' ? `Category approved: ${a.requested}` : decision === 'change' ? `Category changed to ${cat} and approved` : 'Registration rejected'); toast(decision === 'reject' ? 'Rejection recorded and owner notified' : 'Category approved. Subscription is a separate step.'); setDecision(null) }, 900)
+  const [error, setError] = useState('')
+  const [reason, setReason] = useState('')
+  const [categoryKey, setCategoryKey] = useState('')
+  const [decision, setDecision] = useState<'approved' | 'rejected' | null>(null)
+
+  useEffect(() => {
+    if (auth.backend !== 'live' || !auth.platformRole) return
+    let active = true
+    setLoading(true)
+    listOrganisationsAdmin().then((all) => {
+      if (!active) return
+      const found = (all as LiveApprovalOrg[]).find((item) => item.id === id)
+      setOrg(found ?? null)
+      setCategoryKey(found?.industry?.key ?? '')
+    }).catch((e) => {
+      if (active) setError(e instanceof Error ? e.message : 'Could not load organisation')
+    }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [id, auth.backend, auth.platformRole])
+
+  const commit = async () => {
+    if (!org || !decision) return
+    if (decision === 'rejected' && !reason.trim()) { setError('A rejection reason is required.'); return }
+    setBusy(true); setError('')
+    try {
+      await decideApproval(org.id, decision, reason.trim() || undefined, categoryKey || undefined)
+      setOrg({ ...org, approval_status: decision, lifecycle_status: decision === 'approved' ? 'approved' : 'rejected' })
+      toast(decision === 'approved' ? 'Category approved. Subscription remains a separate step.' : 'Registration rejected.')
+      setDecision(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Approval decision failed')
+    } finally { setBusy(false) }
   }
-  return (
-    <>
-      <PageHeader back={<Link to="/platform/approvals" className="text-sm text-ng-mute hover:text-ng-indigo inline-flex items-center gap-1 mb-2"><I.ArrowLeft size={14} />Approvals</Link>} title={a.org} sub={`Submitted ${a.submitted}`} actions={!done && <><Button variant="secondary" onClick={() => setDecision('reject')}>Reject</Button><Button variant="secondary" onClick={() => setDecision('change')}>Change category</Button><Button icon={<I.Check size={16} />} onClick={() => setDecision('approve')}>Approve category</Button></>} />
-      {done && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm flex items-center gap-2 animate-pop"><I.CircleCheck size={18} />{done}. The organisation can now choose a plan.</div>}
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2 p-5"><h3 className="font-semibold mb-4">Registration details</h3><dl className="grid sm:grid-cols-2 gap-5 text-sm">{[['Owner', a.owner], ['Location', a.city], ['Organisation type', a.type], ['Preferred plan', a.plan], ['Email', 'Verified'], ['Phone', 'Verified']].map(([x, y]) => <div key={x}><dt className="text-xs uppercase tracking-wide text-ng-mute">{x}</dt><dd className="mt-1 font-medium">{y === 'Verified' ? <Status value="Verified" /> : y}</dd></div>)}</dl>
-          <h3 className="font-semibold mt-8 mb-3">Supporting documents ({a.docs})</h3>
-          <div className="space-y-2">{Array.from({ length: a.docs }).map((_, i) => <div key={i} className="flex items-center gap-3 rounded-lg border border-ng-line px-4 py-3 text-sm"><I.FileText size={18} className="text-ng-indigo-d" /><span className="flex-1">{['Business registration.pdf', 'Owner ID proof.pdf', 'Facility licence.pdf'][i]}</span><Button size="sm" variant="ghost">Preview</Button></div>)}</div></Card>
-        <div className="space-y-4">
-          <Card className="p-5"><h3 className="font-semibold">Requested category</h3><div className="mt-3 flex items-center gap-3"><span className="size-11 rounded-xl bg-ng-midnight text-ng-lime grid place-items-center"><I.Shapes /></span><div className="font-medium">{a.requested}</div></div>{a.risk !== 'Low' && <div className="mt-4 rounded-lg bg-amber-50 text-amber-800 text-sm p-3 flex gap-2"><I.TriangleAlert size={16} className="mt-0.5 shrink-0" />{a.risk === 'Category mismatch' ? 'Organisation type does not match the requested category.' : 'Healthcare category: legal and compliance review recommended.'}</div>}</Card>
-          <Card className="p-5"><h3 className="font-semibold mb-3">Approval pipeline</h3>{[['Registered', 1], ['Verified', 1], ['Category approval', done ? 1 : 0], ['Plan & payment', -1], ['Activation', -1]].map(([l, s]) => <div key={l as string} className="flex items-center gap-3 py-1.5 text-sm"><span className={cx('size-5 rounded-full grid place-items-center text-white', s === 1 ? 'bg-ng-ok' : s === 0 ? 'bg-ng-indigo animate-pulse-ring' : 'bg-slate-200')}>{s === 1 && <I.Check size={12} />}</span><span className={s === -1 ? 'text-ng-mute' : 'font-medium'}>{l as string}</span></div>)}</Card>
-        </div>
+
+  if (auth.backend !== 'live') return <Card><EmptyState title="Live approval unavailable" body="The NOVAGRID database schema is not active. No sample approval action will be presented as real." /></Card>
+  if (loading) return <><PageHeader title="Loading organisation…" /><Card className="p-5"><Skel className="h-24" /></Card></>
+  if (!org) return <><PageHeader back={<Link to="/platform/approvals" className="text-sm text-ng-mute">← Approvals</Link>} title="Organisation not found" /><Card><EmptyState title="No matching organisation" body={error || 'It may have been removed or you may not have access.'} /></Card></>
+  const decided = org.approval_status !== 'pending'
+  return <>
+    <PageHeader back={<Link to="/platform/approvals" className="text-sm text-ng-mute hover:text-ng-indigo inline-flex items-center gap-1 mb-2"><I.ArrowLeft size={14} />Approvals</Link>} title={org.name} sub={`Registered ${approvalDate(org.created_at)}`} actions={!decided && <><Button variant="secondary" disabled={busy} onClick={() => setDecision('rejected')}>Reject</Button><Button icon={<I.Check size={16} />} disabled={busy} onClick={() => setDecision('approved')}>Approve category</Button></>} />
+    {error && <ErrorState title="Action could not be completed" body={error} />}
+    <div className="grid lg:grid-cols-3 gap-4">
+      <Card className="lg:col-span-2 p-5"><h3 className="font-semibold mb-4">Registration details</h3><dl className="grid sm:grid-cols-2 gap-5 text-sm">
+        {([['Organisation', org.name], ['Location', org.city || 'Not provided'], ['Requested category', org.industry?.name || 'Not assigned'], ['Lifecycle', org.lifecycle_status], ['Registration date', approvalDate(org.created_at)], ['Approval status', org.approval_status]] as [string,string][]).map(([label,value]) => <div key={label}><dt className="text-xs uppercase tracking-wide text-ng-mute">{label}</dt><dd className="mt-1 font-medium">{value}</dd></div>)}
+      </dl></Card>
+      <Card className="p-5"><h3 className="font-semibold mb-2">Approval rules</h3><p className="text-sm text-ng-mute">Category approval does not activate billing or a subscription. The organisation must complete the separate plan and payment process.</p><div className="mt-4"><Badge tone={decided ? (org.approval_status === 'approved' ? 'ok' : 'err') : 'warn'}>{org.approval_status}</Badge></div></Card>
+    </div>
+    <Modal open={!!decision} onClose={() => { if (!busy) setDecision(null) }} title={decision === 'approved' ? 'Approve category' : 'Reject registration'} footer={<><Button variant="secondary" disabled={busy} onClick={() => setDecision(null)}>Cancel</Button><Button loading={busy} variant={decision === 'rejected' ? 'danger' : 'primary'} onClick={() => void commit()}>{decision === 'rejected' ? 'Reject registration' : 'Confirm approval'}</Button></>}>
+      <div className="space-y-4">
+        <Field label="Assigned category"><Select value={categoryKey} onChange={(e) => setCategoryKey(e.target.value)}><option value="">Keep requested category</option>{industries.map((item) => <option key={item.key} value={item.key}>{item.name}</option>)}</Select></Field>
+        <Field label={decision === 'rejected' ? 'Rejection reason (required)' : 'Internal note (optional)'}><Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={decision === 'rejected' ? 'Explain why this registration is rejected' : 'Add an internal review note'} /></Field>
+        {decision === 'approved' && <p className="text-xs text-ng-mute">This action approves the industry category only. It does not activate a subscription.</p>}
       </div>
-      <Modal open={!!decision} onClose={() => setDecision(null)} title={decision === 'approve' ? 'Approve category' : decision === 'change' ? 'Change category' : 'Reject registration'} footer={<><Button variant="secondary" onClick={() => setDecision(null)}>Cancel</Button><Button loading={busy} variant={decision === 'reject' ? 'danger' : 'primary'} onClick={commit}>{decision === 'reject' ? 'Reject' : 'Confirm'}</Button></>}>
-        <div className="space-y-4">
-          {decision === 'change' && <Field label="Assigned category"><Select value={cat} onChange={(e) => setCat(e.target.value)}>{industries.map((i) => <option key={i.key}>{i.name}</option>)}</Select></Field>}
-          <Field label={decision === 'approve' ? 'Note (optional)' : 'Reason (required, sent to owner)'}><Textarea rows={3} placeholder="Recorded in the audit log" /></Field>
-          {decision === 'approve' && <p className="text-xs text-ng-mute">Approving a category does not activate a subscription.</p>}
-        </div>
-      </Modal>
-    </>
-  )
+    </Modal>
+  </>
 }
 
 export function IndustriesAdmin() {
