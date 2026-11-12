@@ -24,7 +24,7 @@ export function BillingPage({ ind }: { ind: 'gym' | 'education' }) {
     let alive = true
     setLoading(true)
     setError(null)
-    Promise.all([getMySubscription(tenantId), listIndustryPlans(industryKey), getTenantUsage(tenantId)])
+    Promise.all([getMySubscription(tenantId), listIndustryPlans(industryKey), getTenantUsage(tenantId, industryKey)])
       .then(([current, available, currentUsage]) => {
         if (!alive) return
         setSubscription(current)
