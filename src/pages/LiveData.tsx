@@ -291,6 +291,8 @@ export function LiveGymAttendance({ tenantId }: { tenantId: string }) {
 export function LiveGymRenewals({ tenantId }: { tenantId: string }) {
   const toast = useToast()
   const [rows, setRows] = useState<GymMembership[] | null>(null)
+  const [plans, setPlans] = useState<GymMembershipPlan[]>([])
+  const [selectedPlan, setSelectedPlan] = useState('')
   const [query, setQuery] = useState('')
   const [range, setRange] = useState('all')
   const [renewing, setRenewing] = useState<GymMembership | null>(null)
@@ -301,7 +303,7 @@ export function LiveGymRenewals({ tenantId }: { tenantId: string }) {
   const today = new Date().toISOString().slice(0,10)
   const load = useCallback(async () => {
     setError(null)
-    try { setRows(await listGymMemberships(tenantId)) }
+    try { const [memberships,availablePlans] = await Promise.all([listGymMemberships(tenantId),listGymMembershipPlans(tenantId,true)]); setRows(memberships); setPlans(availablePlans) }
     catch (e) { setError(e); setRows([]) }
   }, [tenantId])
   useEffect(() => { void load() }, [load])
@@ -314,7 +316,8 @@ export function LiveGymRenewals({ tenantId }: { tenantId: string }) {
     return (range === 'all' || (range === 'expired' ? left < 0 : range === 'today' ? left === 0 : left >= 0 && left <= 30))
       && [r.contact?.full_name ?? '', r.plan_name, r.contact?.phone_e164 ?? ''].some(v => v.toLowerCase().includes(query.toLowerCase()))
   })
-  const beginRenewal = (r:GymMembership) => { setRenewing(r); setPrice((r.amount_paise/100).toFixed(2).replace(/\\.00$/,'')); setDays('30') }
+  const beginRenewal = (r:GymMembership) => { setRenewing(r); setSelectedPlan(''); setPrice((r.amount_paise/100).toFixed(2).replace(/\\.00$/,'')); setDays('30') }
+  const applyRenewalPlan = (id:string) => { const p=plans.find(x=>x.id===id); setSelectedPlan(id); if(p){setPrice((p.price_paise/100).toFixed(2).replace(/\\.00$/,''));setDays(String(p.duration_days))} }
   const renew = async () => {
     if (!renewing) return
     const start = renewing.end_date >= today ? new Date(new Date(renewing.end_date+'T00:00:00').getTime()+86400000) : new Date(today+'T00:00:00')
@@ -351,8 +354,9 @@ export function LiveGymRenewals({ tenantId }: { tenantId: string }) {
     </Card>
     <Modal open={!!renewing} onClose={()=>setRenewing(null)} title={'Renew '+(renewing?.contact?.full_name ?? 'membership')} footer={<><Button variant="secondary" onClick={()=>setRenewing(null)}>Cancel</Button><Button loading={busy} disabled={!/^\\d+(\\.\\d{1,2})?$/.test(price)||Number(price)<0||!['30','90','180','365'].includes(days)} onClick={()=>void renew()}>Record renewal</Button></>}>
       <div className="space-y-4">
+        <Field label="Saved membership plan"><Select value={selectedPlan} onChange={e=>applyRenewalPlan(e.target.value)}><option value="">Keep current/custom duration</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name} · {p.duration_days} days · ₹{(p.price_paise/100).toLocaleString("en-IN")}</option>)}</Select></Field>
         <Field label="Renewal duration"><Select value={days} onChange={e=>setDays(e.target.value)}><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option></Select></Field>
-        <Field label="Renewal amount (INR)"><Input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)}/></Field>
+        <Field label="Renewal amount (INR)"><Input inputMode="decimal" value={price} onChange={e=>{setSelectedPlan("");setPrice(e.target.value)}}/></Field>
         <p className="text-xs text-ng-mute">A new membership record is created. The previous record is preserved. No payment is collected and no reminder is sent.</p>
       </div>
     </Modal>
