@@ -36,11 +36,13 @@ do $$
 declare v int; r record;
 begin
   select public.novagrid_schema_version() into v;
-  if v <> 18 then raise exception 'schema version expected 18, got %', v; end if;
+  if v <> 19 then raise exception 'schema version expected 19, got %', v; end if;
   if (select count(*) from public.industry_categories) < 10 then raise exception 'industry seeds missing'; end if;
   if (select count(*) from public.roles where tenant_id is null) < 6 then raise exception 'system roles missing'; end if;
   if to_regclass('public.gym_attendance') is null then raise exception 'gym attendance table missing'; end if;
   if to_regclass('public.gym_trainers') is null then raise exception 'gym trainers table missing'; end if;
+  if to_regclass('public.gym_membership_plans') is null then raise exception 'gym membership plans table missing'; end if;
+  if not (select relrowsecurity and relforcerowsecurity from pg_class where oid='public.gym_membership_plans'::regclass) then raise exception 'gym membership plans RLS is not enabled and forced'; end if;
   if to_regclass('public.gym_training_sessions') is null then raise exception 'gym training sessions table missing'; end if;
   if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='organisations' and column_name='timezone') then raise exception 'organisation timezone column missing'; end if;
   if to_regclass('public.gym_trainer_availability') is null or to_regclass('public.gym_trainer_time_off') is null then raise exception 'trainer availability tables missing'; end if;
