@@ -180,7 +180,7 @@ export function ApprovalsPage() {
     setLoading(true)
     setError('')
     try {
-      const all = await listOrganisationsAdmin() as LiveApprovalOrg[]
+      const all = await listOrganisationsAdmin()
       setRows(all.filter((org) => org.approval_status === 'pending'))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load approval queue')
@@ -230,7 +230,7 @@ export function ApprovalDetail({ id }: { id: string }) {
     setLoading(true)
     listOrganisationsAdmin().then((all) => {
       if (!active) return
-      const found = (all as LiveApprovalOrg[]).find((item) => item.id === id)
+      const found = all.find((item) => item.id === id)
       setOrg(found ?? null)
       setCategoryKey(found?.industry?.key ?? '')
     }).catch((e) => {
@@ -340,11 +340,11 @@ export function SubscriptionsAdmin() {
     attention: rows.filter((r) => ['grace', 'read_only', 'suspended', 'expired'].includes(r.status)).length,
   }
   const startTrial = async () => {
-    if (!chosenOrg || !selectedPlan) { toast('Choose an approved organisation and a plan.', 'error'); return }
+    if (!chosenOrg || !selectedPlan) { toast('Choose an approved organisation and a plan.', 'err'); return }
     const duration = Number(days)
-    if (!Number.isInteger(duration) || duration < 1 || duration > 30) { toast('Trial duration must be between 1 and 30 days.', 'error'); return }
+    if (!Number.isInteger(duration) || duration < 1 || duration > 30) { toast('Trial duration must be between 1 and 30 days.', 'err'); return }
     if (rows.some((r) => r.organisation?.id === chosenOrg.id && ['trial','active','grace','read_only'].includes(r.status))) {
-      toast('This organisation already has a current subscription. No change was made.', 'error')
+      toast('This organisation already has a current subscription. No change was made.', 'err')
       return
     }
     setSaving(true)
@@ -355,7 +355,7 @@ export function SubscriptionsAdmin() {
       setSelectedPlan('')
       setAttempt((v) => v + 1)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Trial could not be assigned.', 'error')
+      toast(e instanceof Error ? e.message : 'Trial could not be assigned.', 'err')
     } finally { setSaving(false) }
   }
 
