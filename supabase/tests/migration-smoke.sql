@@ -36,7 +36,7 @@ do $$
 declare v int; r record;
 begin
   select public.novagrid_schema_version() into v;
-  if v <> 17 then raise exception 'schema version expected 17, got %', v; end if;
+  if v <> 18 then raise exception 'schema version expected 18, got %', v; end if;
   if (select count(*) from public.industry_categories) < 10 then raise exception 'industry seeds missing'; end if;
   if (select count(*) from public.roles where tenant_id is null) < 6 then raise exception 'system roles missing'; end if;
   if to_regclass('public.gym_attendance') is null then raise exception 'gym attendance table missing'; end if;
