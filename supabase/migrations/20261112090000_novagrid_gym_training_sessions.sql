@@ -33,10 +33,10 @@ alter table public.gym_training_sessions force row level security;
 revoke all on public.gym_training_sessions from anon, authenticated;
 grant select,insert,update on public.gym_training_sessions to authenticated;
 create policy gym_training_sessions_read on public.gym_training_sessions for select to authenticated
- using (private.has_permission(tenant_id,'contacts.view') and private.has_module_access(tenant_id,'gym.trainers'));
+ using (private.has_permission(tenant_id,'contacts.view') and private.has_module_access(tenant_id,'gym.sessions'));
 create policy gym_training_sessions_insert on public.gym_training_sessions for insert to authenticated
- with check (private.has_permission(tenant_id,'contacts.create') and private.has_module_access(tenant_id,'gym.trainers')
+ with check (private.has_permission(tenant_id,'contacts.create') and private.has_module_access(tenant_id,'gym.sessions')
    and private.is_writable(tenant_id) and created_by=auth.uid());
 create policy gym_training_sessions_update on public.gym_training_sessions for update to authenticated
- using (private.has_permission(tenant_id,'contacts.edit') and private.has_module_access(tenant_id,'gym.trainers') and private.is_writable(tenant_id))
- with check (private.has_permission(tenant_id,'contacts.edit') and private.has_module_access(tenant_id,'gym.trainers') and private.is_writable(tenant_id));
+ using (private.has_permission(tenant_id,'contacts.edit') and private.has_module_access(tenant_id,'gym.sessions') and private.is_writable(tenant_id))
+ with check (private.has_permission(tenant_id,'contacts.edit') and private.has_module_access(tenant_id,'gym.sessions') and private.is_writable(tenant_id));
