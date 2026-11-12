@@ -55,9 +55,52 @@ async function storageUpload(token,tenant,path,expectOk){
  const raw=await r.text();
  assert(expectOk?r.ok:!r.ok,expectOk?`Own-tenant Storage upload failed: ${raw}`:`Cross-tenant Storage upload unexpectedly succeeded: ${raw}`);
 }
+const tenantAPath="21000000-0000-0000-0000-000000000001/files/tenant-a.txt";
+const tenantBPath="21000000-0000-0000-0000-000000000002/files/tenant-b.txt";
 await storageUpload(tokenA,"21000000-0000-0000-0000-000000000001","tenant-a.txt",true);
+await storageUpload(tokenB,"21000000-0000-0000-0000-000000000002","tenant-b.txt",true);
 await storageUpload(tokenA,"21000000-0000-0000-0000-000000000002","cross-tenant.txt",false);
-console.log("PASS Storage API: tenant A can upload its own file and cannot upload into tenant B");
+
+async function storageRequest(token,path,options={}) {
+ const response=await fetch(base+path,{...options,headers:{apikey:anon,Authorization:`Bearer ${token}`,...(options.headers||{})}});
+ const raw=await response.text();let data;try{data=raw?JSON.parse(raw):raw}catch{data=raw}
+ return {response,data,raw};
+}
+const ownList=await storageRequest(tokenA,"/storage/v1/object/list/novagrid-files",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prefix:"21000000-0000-0000-0000-000000000001/files",limit:100})});
+assert(ownList.response.ok&&Array.isArray(ownList.data)&&ownList.data.some(x=>x.name==="tenant-a.txt"),"Tenant A cannot list its own object");
+const foreignList=await storageRequest(tokenA,"/storage/v1/object/list/novagrid-files",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prefix:"21000000-0000-0000-0000-000000000002/files",limit:100})});
+assert(foreignList.response.ok&&Array.isArray(foreignList.data)&&foreignList.data.length===0,"Tenant A can enumerate tenant B objects");
+
+const ownSigned=await storageRequest(tokenA,"/storage/v1/object/sign/novagrid-files/"+tenantAPath,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({expiresIn:60})});
+assert(ownSigned.response.ok&&typeof ownSigned.data?.signedURL==="string","Tenant A could not create a signed URL for its own file");
+const signedPath=ownSigned.data.signedURL.startsWith("http")?ownSigned.data.signedURL:base+"/storage/v1"+(ownSigned.data.signedURL.startsWith("/")?ownSigned.data.signedURL:"/"+ownSigned.data.signedURL);
+const signedRead=await fetch(signedPath);
+assert(signedRead.ok&&(await signedRead.text()).includes("NOVAGRID isolated integration fixture"),"Own-tenant signed URL did not return the uploaded bytes");
+const foreignSigned=await storageRequest(tokenA,"/storage/v1/object/sign/novagrid-files/"+tenantBPath,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({expiresIn:60})});
+assert(!foreignSigned.response.ok,"Tenant A received a signed URL for tenant B's object");
+
+const foreignRead=await storageRequest(tokenA,"/storage/v1/object/novagrid-files/"+tenantBPath);
+assert(!foreignRead.response.ok,"Tenant A directly downloaded tenant B's object");
+const foreignDelete=await storageRequest(tokenA,"/storage/v1/object/novagrid-files/"+tenantBPath,{method:"DELETE"});
+assert(!foreignDelete.response.ok,"Tenant A deleted tenant B's object");
+
+const lowerQuota=spawnSync("psql",[process.env.SUPABASE_DB_URL,"-v","ON_ERROR_STOP=1","-c","update public.subscription_plans set limits=jsonb_set(limits,'{storage_mb}','1'::jsonb,true) where key='gym_starter';"],{encoding:"utf8"});
+if(lowerQuota.status!==0)throw new Error(lowerQuota.stderr||"Could not configure isolated quota fixture");
+const oversized=Buffer.alloc(2*1024*1024,65);
+const oversizedResponse=await fetch(base+"/storage/v1/object/novagrid-files/"+tenantAPath.replace("tenant-a.txt","oversized.bin"),{
+ method:"POST",headers:{apikey:anon,Authorization:`Bearer ${tokenA}`,"Content-Type":"application/octet-stream","Content-Length":String(oversized.byteLength)},body:oversized
+});
+assert(!oversizedResponse.ok,"Storage accepted a file exceeding the deliberately reduced 1 MiB tenant quota");
+
+const ownDelete=await storageRequest(tokenA,"/storage/v1/object/novagrid-files/"+tenantAPath,{method:"DELETE"});
+assert(ownDelete.response.ok,"Tenant A could not delete its own file");
+const ownAfterDelete=await storageRequest(tokenA,"/storage/v1/object/novagrid-files/"+tenantAPath);
+assert(!ownAfterDelete.response.ok,"Deleted own-tenant object remains downloadable");
+const foreignStillThere=await storageRequest(tokenB,"/storage/v1/object/novagrid-files/"+tenantBPath);
+assert(foreignStillThere.response.ok,"Tenant A's denied delete affected tenant B's object");
+console.log("PASS Storage API: own-tenant upload, list, signed read and delete");
+console.log("PASS Storage isolation: cross-tenant list, download, signed URL, upload and delete denied");
+console.log("PASS Storage quota: oversized upload rejected at the 1 MiB test limit");
 
 // Do not delete tenant fixtures individually: audit triggers intentionally
 // preserve audit history and its tenant FK prevents unsafe organisation deletion.
