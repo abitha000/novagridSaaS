@@ -10,6 +10,7 @@ import { createGymMembership, listGymMemberships, setGymMembershipStatus, type G
 import { listGymAttendance, saveGymAttendance, type GymAttendanceStatus } from '../lib/api/gym-attendance'
 import { createGymTrainer, listGymTrainers, setGymTrainerStatus, type GymTrainer } from '../lib/api/gym-trainers'
 import { createGymTrainingSession, listGymTrainingSessions, setGymTrainingSessionStatus, type GymTrainingSession } from '../lib/api/gym-training-sessions'
+import { createTrainerTimeOff, deleteTrainerTimeOff, listTrainerAvailability, listTrainerTimeOff, saveTrainerAvailability, type TrainerAvailability, type TrainerTimeOff } from '../lib/api/gym-trainer-availability'
 
 const SchemaNote = ({ e }: { e: unknown }) =>
   e instanceof BackendError && e.kind === 'schema_missing' ? (
@@ -481,4 +482,90 @@ export function LiveGymTrainingSessions({ tenantId }: { tenantId: string }) {
       </div>
     </Modal>
   </>
+}
+
+
+/* ---------------- Trainer availability and leave (live) ---------------- */
+export function LiveGymTrainerAvailability({ tenantId }: { tenantId:string }) {
+ const toast=useToast()
+ const [trainers,setTrainers]=useState<GymTrainer[]>([])
+ const [selected,setSelected]=useState('')
+ const [slots,setSlots]=useState<TrainerAvailability[]>([])
+ const [leave,setLeave]=useState<TrainerTimeOff[]>([])
+ const [loading,setLoading]=useState(true)
+ const [busy,setBusy]=useState(false)
+ const [error,setError]=useState<unknown>(null)
+ const [leaveOpen,setLeaveOpen]=useState(false)
+ const [leaveForm,setLeaveForm]=useState({starts_at:'',ends_at:'',reason:''})
+ const from=new Date().toISOString(), to=new Date(Date.now()+90*86400000).toISOString()
+ const load=useCallback(async()=>{
+  setLoading(true);setError(null)
+  try {
+   const [t,l]=await Promise.all([listGymTrainers(tenantId),listTrainerTimeOff(tenantId,from,to)])
+   const active=t.filter(x=>x.status==='active');setTrainers(active)
+   const trainerId=selected&&active.some(x=>x.id===selected)?selected:(active[0]?.id??'')
+   setSelected(trainerId);setLeave(l)
+   setSlots(trainerId?await listTrainerAvailability(tenantId).then(all=>all.filter(x=>x.trainer_id===trainerId)):[])
+  } catch(e){setError(e)} finally{setLoading(false)}
+ },[tenantId,selected])
+ useEffect(()=>{void load()},[load])
+ const weekdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+ const setSlot=(day:number,field:'starts_at'|'ends_at',value:string)=>{
+  setSlots(prev=>{
+   const existing=prev.find(x=>x.weekday===day)
+   if(existing)return prev.map(x=>x.weekday===day?{...x,[field]:value}:x)
+   return [...prev,{id:'',tenant_id:tenantId,trainer_id:selected,weekday:day,starts_at:field==='starts_at'?value:'09:00',ends_at:field==='ends_at'?value:'18:00'}]
+  })
+ }
+ const toggleDay=(day:number,on:boolean)=>{
+  setSlots(prev=>on?[...prev,{id:'',tenant_id:tenantId,trainer_id:selected,weekday:day,starts_at:'09:00',ends_at:'18:00'}]:prev.filter(x=>x.weekday!==day))
+ }
+ const save=async()=>{
+  setBusy(true)
+  try{await saveTrainerAvailability(tenantId,selected,slots.map(({weekday,starts_at,ends_at})=>({weekday,starts_at,ends_at})));toast('Working hours saved');await load()}
+  catch(e){toast(errorMessage(e),'err')}finally{setBusy(false)}
+ }
+ const addLeave=async()=>{
+  setBusy(true)
+  try{await createTrainerTimeOff(tenantId,{trainer_id:selected,starts_at:new Date(leaveForm.starts_at).toISOString(),ends_at:new Date(leaveForm.ends_at).toISOString(),reason:leaveForm.reason});toast('Trainer leave added');setLeaveOpen(false);setLeaveForm({starts_at:'',ends_at:'',reason:''});await load()}
+  catch(e){toast(errorMessage(e),'err')}finally{setBusy(false)}
+ }
+ const removeLeave=async(id:string)=>{
+  try{await deleteTrainerTimeOff(id);toast('Leave removed');await load()}catch(e){toast(errorMessage(e),'err')}
+ }
+ return <>
+  <PageHeader title="Trainer availability" sub="Set weekly working hours and manage trainer leave." actions={<Button loading={busy} disabled={!selected} onClick={()=>void save()}>Save working hours</Button>}/>
+  <SchemaNote e={error}/>
+  <Card>
+   <div className="p-4 border-b border-ng-line"><Field label="Trainer"><Select value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Choose trainer</option>{trainers.map(t=><option key={t.id} value={t.id}>{t.contact?.full_name??'Trainer'}</option>)}</Select></Field></div>
+   <div className="p-4 space-y-3">
+    <div className="font-semibold">Weekly working hours <span className="text-xs text-ng-mute font-normal">(UTC)</span></div>
+    {weekdays.map((day,i)=>{
+     const slot=slots.find(x=>x.weekday===i)
+     return <div key={day} className="grid grid-cols-[1fr_1fr_1fr] items-center gap-3 border-b border-ng-line py-2">
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!slot} onChange={e=>toggleDay(i,e.target.checked)}/>{day}</label>
+      <Input type="time" disabled={!slot} value={slot?.starts_at??'09:00'} onChange={e=>setSlot(i,'starts_at',e.target.value)}/>
+      <Input type="time" disabled={!slot} value={slot?.ends_at??'18:00'} onChange={e=>setSlot(i,'ends_at',e.target.value)}/>
+     </div>
+    })}
+    <p className="text-xs text-ng-mute">If no weekly hours are configured for a trainer, session scheduling remains unrestricted by working hours. Once configured, sessions must fit within an enabled time slot.</p>
+   </div>
+  </Card>
+  <div className="flex items-center justify-between mt-5 mb-3"><h3 className="font-semibold">Upcoming leave / unavailable time</h3><Button variant="secondary" onClick={()=>setLeaveOpen(true)} disabled={!selected}>Add leave</Button></div>
+  <Card>
+   {leave.length===0?<EmptyState title="No leave recorded" body="Add leave or unavailable time to block session bookings."/>:
+    <DataTable rows={leave.filter(x=>x.trainer_id===selected)} cols={[
+     {key:'period',header:'Unavailable period',mobile:'title',render:x=><div><div className="font-medium">{new Date(x.starts_at).toLocaleString('en-IN')}</div><div className="text-xs text-ng-mute">Until {new Date(x.ends_at).toLocaleString('en-IN')}</div></div>},
+     {key:'reason',header:'Reason',render:x=><span>{x.reason??'—'}</span>},
+     {key:'action',header:'',render:x=><Button size="sm" variant="secondary" onClick={()=>void removeLeave(x.id)}>Remove</Button>}
+    ]}/>}
+  </Card>
+  <Modal open={leaveOpen} onClose={()=>setLeaveOpen(false)} title="Add trainer leave" footer={<><Button variant="secondary" onClick={()=>setLeaveOpen(false)}>Cancel</Button><Button loading={busy} disabled={!leaveForm.starts_at||!leaveForm.ends_at||Date.parse(leaveForm.ends_at)<=Date.parse(leaveForm.starts_at)} onClick={()=>void addLeave()}>Save leave</Button></>}>
+   <div className="space-y-4">
+    <Field label="Starts"><Input type="datetime-local" value={leaveForm.starts_at} onChange={e=>setLeaveForm({...leaveForm,starts_at:e.target.value})}/></Field>
+    <Field label="Ends"><Input type="datetime-local" value={leaveForm.ends_at} onChange={e=>setLeaveForm({...leaveForm,ends_at:e.target.value})}/></Field>
+    <Field label="Reason (optional)"><Input value={leaveForm.reason} onChange={e=>setLeaveForm({...leaveForm,reason:e.target.value})}/></Field>
+   </div>
+  </Modal>
+ </>
 }
