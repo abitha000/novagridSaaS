@@ -122,7 +122,6 @@ export function LivePeople({ tenantId }: { tenantId: string }) {
 }
 
 /* ---------------- Payments (live, manual records only) ---------------- */
-import { createPayment, listPayments, type PaymentRecord } from '../lib/api/payments'
 export function LivePayments({ tenantId }: { tenantId: string }) {
   const toast = useToast()
   const [rows, setRows] = useState<PaymentRecord[] | null>(null)
