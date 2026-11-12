@@ -36,12 +36,13 @@ do $$
 declare v int; r record;
 begin
   select public.novagrid_schema_version() into v;
-  if v <> 17 then raise exception 'schema version expected 17, got %', v; end if;
+  if v <> 18 then raise exception 'schema version expected 18, got %', v; end if;
   if (select count(*) from public.industry_categories) < 10 then raise exception 'industry seeds missing'; end if;
   if (select count(*) from public.roles where tenant_id is null) < 6 then raise exception 'system roles missing'; end if;
   if to_regclass('public.gym_attendance') is null then raise exception 'gym attendance table missing'; end if;
   if to_regclass('public.gym_trainers') is null then raise exception 'gym trainers table missing'; end if;
   if to_regclass('public.gym_training_sessions') is null then raise exception 'gym training sessions table missing'; end if;
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='organisations' and column_name='timezone') then raise exception 'organisation timezone column missing'; end if;
   if to_regclass('public.gym_trainer_availability') is null or to_regclass('public.gym_trainer_time_off') is null then raise exception 'trainer availability tables missing'; end if;
   if not exists (select 1 from pg_trigger where tgname='gym_training_session_availability' and not tgisinternal) then raise exception 'trainer availability enforcement trigger missing'; end if;
   if not exists (select 1 from pg_trigger where tgname='gym_training_session_conflicts' and not tgisinternal) then raise exception 'gym training session conflict trigger missing'; end if;

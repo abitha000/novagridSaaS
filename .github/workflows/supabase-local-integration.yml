@@ -22,7 +22,7 @@ jobs:
         with:
           version: latest
       - name: Start isolated Supabase stack
-        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,inbucket
       - name: Apply NOVAGRID migrations to disposable local Supabase
         run: supabase db reset --local
       - name: Export local Supabase credentials
