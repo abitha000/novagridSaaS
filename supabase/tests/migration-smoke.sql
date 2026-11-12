@@ -499,3 +499,26 @@ begin
   if not v_rejected then raise exception 'academic result trigger accepted inactive enrolment'; end if;
 end
 $academic_result_validation$;
+
+
+-- Durable message-credit ledger: status changes and retries must never refund a credit.
+do $notification_usage_ledger$
+declare
+  v_recipient uuid;
+  v_count bigint;
+begin
+  select id into v_recipient from public.notification_recipients where idempotency_key='quota-test-1';
+  if v_recipient is null then raise exception 'quota ledger fixture recipient missing'; end if;
+  select count(*) into v_count from public.notification_usage where recipient_id=v_recipient;
+  if v_count <> 1 then raise exception 'queued recipient must consume exactly one credit, got %',v_count; end if;
+
+  update public.notification_recipients set status='skipped' where id=v_recipient;
+  select count(*) into v_count from public.notification_usage where recipient_id=v_recipient;
+  if v_count <> 1 then raise exception 'changing an admitted recipient to skipped refunded its credit'; end if;
+
+  update public.notification_recipients set status='failed' where id=v_recipient;
+  update public.notification_recipients set status='retrying' where id=v_recipient;
+  select count(*) into v_count from public.notification_usage where recipient_id=v_recipient;
+  if v_count <> 1 then raise exception 'retry transition duplicated or refunded a message credit'; end if;
+end
+$notification_usage_ledger$;
