@@ -7,6 +7,11 @@ select 'gym.sessions','Personal training sessions','industry',id
 from public.industry_categories where key='gym'
 on conflict (key) do nothing;
 
+-- The parent table's primary key is id; add the tenant-scoped candidate key
+-- required by the composite foreign key below.
+alter table public.gym_trainers
+  add constraint gym_trainers_tenant_id_id_key unique (tenant_id,id);
+
 create table public.gym_training_sessions (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.organisations(id) on delete cascade,
