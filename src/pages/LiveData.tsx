@@ -7,6 +7,7 @@ import { archiveContact, createContact, createContacts, listAllContacts, listCon
 import { contactsToCsv, parseContactsCsv, type CsvContactRow } from '../lib/csv'
 import type { Channel, Contact, StaffMember } from '../lib/api/types'
 import { createGymMembership, listGymMemberships, setGymMembershipStatus, type GymMembership } from '../lib/api/gym'
+import { listGymMembershipPlans, type GymMembershipPlan } from '../lib/api/gym-membership-plans'
 import { listGymMembershipPlans, saveGymMembershipPlan, setGymMembershipPlanActive, type GymMembershipPlan } from '../lib/api/gym-membership-plans'
 import { listGymAttendance, saveGymAttendance, type GymAttendanceStatus } from '../lib/api/gym-attendance'
 import { createGymTrainer, listGymTrainers, setGymTrainerStatus, type GymTrainer } from '../lib/api/gym-trainers'
@@ -165,6 +166,8 @@ export function LiveGymMembers({ tenantId }: { tenantId: string }) {
   const toast = useToast()
   const [rows, setRows] = useState<GymMembership[] | null>(null)
   const [people, setPeople] = useState<Contact[]>([])
+  const [plans, setPlans] = useState<GymMembershipPlan[]>([])
+  const [selectedPlan, setSelectedPlan] = useState('')
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState('all')
   const [error, setError] = useState<unknown>(null)
@@ -174,7 +177,7 @@ export function LiveGymMembers({ tenantId }: { tenantId: string }) {
 
   const load = useCallback(() => {
     setError(null)
-    Promise.all([listGymMemberships(tenantId), listAllContacts(tenantId)]).then(([m,c]) => { setRows(m); setPeople(c.filter(x => x.type === 'member' || x.type === 'person')) }).catch(e => { setError(e); setRows([]) })
+    Promise.all([listGymMemberships(tenantId), listAllContacts(tenantId), listGymMembershipPlans(tenantId,true)]).then(([m,c,p]) => { setRows(m); setPeople(c.filter(x => x.type === 'member' || x.type === 'person')); setPlans(p) }).catch(e => { setError(e); setRows([]) })
   }, [tenantId])
   useEffect(load, [load])
 
@@ -184,6 +187,7 @@ export function LiveGymMembers({ tenantId }: { tenantId: string }) {
     return (tab === 'all' || (tab === 'active' ? state === 'active' : tab === 'expired' ? state === 'expired' : state === tab))
       && [r.contact?.full_name ?? '', r.plan_name, r.contact?.phone_e164 ?? ''].some(v => v.toLowerCase().includes(query.toLowerCase()))
   })
+  const applyPlan = (id:string) => { const p=plans.find(x=>x.id===id); setSelectedPlan(id); if(!p)return; const start=form.start_date; const endDate=new Date(new Date(start+'T00:00:00').getTime()+p.duration_days*86400000-86400000); setForm(v=>({...v,plan_name:p.name,end_date:endDate.toISOString().slice(0,10),amount:(p.price_paise/100).toFixed(2).replace(/\\.00$/,'')})) }
   const amount = (n:number) => new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n/100)
   const counts = { active: (rows ?? []).filter(r => stateOf(r)==='active').length, expired: (rows ?? []).filter(r => stateOf(r)==='expired').length, paused: (rows ?? []).filter(r => r.status==='paused').length }
 
@@ -221,10 +225,10 @@ export function LiveGymMembers({ tenantId }: { tenantId: string }) {
     <Modal open={open} onClose={()=>setOpen(false)} title="Add gym membership" footer={<><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button loading={busy} disabled={!form.contact_id || form.plan_name.trim().length<2 || !/^\\d+(\\.\\d{1,2})?$/.test(form.amount) || Number(form.amount)<0} onClick={async()=>{setBusy(true);try{await createGymMembership(tenantId,{contact_id:form.contact_id,plan_name:form.plan_name,start_date:form.start_date,end_date:form.end_date,amount_paise:Math.round(Number(form.amount)*100),notes:form.notes});toast('Membership created');setOpen(false);load()}catch(e){toast(errorMessage(e),'err')}finally{setBusy(false)}}}>Save membership</Button></>}>
       <div className="space-y-4">
         <Field label="Member"><Select value={form.contact_id} onChange={e=>setForm({...form,contact_id:e.target.value})}><option value="">Choose member</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</Select></Field>
-        <Field label="Plan name"><Input value={form.plan_name} onChange={e=>setForm({...form,plan_name:e.target.value})}/></Field>
+        <Field label="Membership plan"><Select value={selectedPlan} onChange={e=>applyPlan(e.target.value)}><option value="">Choose a saved plan or enter custom details</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name} · {p.duration_days} days · ₹{(p.price_paise/100).toLocaleString("en-IN")}</option>)}</Select></Field><Field label="Plan name"><Input value={form.plan_name} onChange={e=>{setSelectedPlan("");setForm({...form,plan_name:e.target.value})}}/></Field>
         <Field label="Start date"><Input type="date" value={form.start_date} onChange={e=>setForm({...form,start_date:e.target.value})}/></Field>
         <Field label="End date"><Input type="date" value={form.end_date} onChange={e=>setForm({...form,end_date:e.target.value})}/></Field>
-        <Field label="Membership price (INR)"><Input inputMode="decimal" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/></Field>
+        <Field label="Membership price (INR)"><Input inputMode="decimal" value={form.amount} onChange={e=>{setSelectedPlan("");setForm({...form,amount:e.target.value})}}/></Field>
         <Field label="Notes (optional)"><Input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
       </div>
     </Modal>
