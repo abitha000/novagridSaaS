@@ -1,4 +1,5 @@
 -- Phase 10: weekly trainer availability and date-specific leave.
+-- Weekly schedule clock values are stored and evaluated in UTC; organisation timezone support can be layered in separately.
 create or replace function public.novagrid_schema_version()
 returns integer language sql stable set search_path = '' as $$ select 17 $$;
 
@@ -51,10 +52,10 @@ as $$
 declare local_weekday integer; local_start time; local_end time; local_day date;
 begin
  if new.status <> 'scheduled' then return new; end if;
- local_day := (new.starts_at at time zone coalesce((select timezone from public.organisations where id=new.tenant_id),'Asia/Kolkata'))::date;
+ local_day := (new.starts_at at time zone 'UTC')::date;
  local_weekday := extract(dow from local_day)::integer;
- local_start := new.starts_at at time zone coalesce((select timezone from public.organisations where id=new.tenant_id),'Asia/Kolkata');
- local_end := new.ends_at at time zone coalesce((select timezone from public.organisations where id=new.tenant_id),'Asia/Kolkata');
+ local_start := new.starts_at at time zone 'UTC';
+ local_end := new.ends_at at time zone 'UTC';
 
  if exists(select 1 from public.gym_trainer_availability a
   where a.tenant_id=new.tenant_id and a.trainer_id=new.trainer_id and a.weekday=local_weekday)
