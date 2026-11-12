@@ -36,12 +36,13 @@ do $$
 declare v int; r record;
 begin
   select public.novagrid_schema_version() into v;
-  if v <> 15 then raise exception 'schema version expected 15, got %', v; end if;
+  if v <> 16 then raise exception 'schema version expected 16, got %', v; end if;
   if (select count(*) from public.industry_categories) < 10 then raise exception 'industry seeds missing'; end if;
   if (select count(*) from public.roles where tenant_id is null) < 6 then raise exception 'system roles missing'; end if;
   if to_regclass('public.gym_attendance') is null then raise exception 'gym attendance table missing'; end if;
   if to_regclass('public.gym_trainers') is null then raise exception 'gym trainers table missing'; end if;
   if to_regclass('public.gym_training_sessions') is null then raise exception 'gym training sessions table missing'; end if;
+  if not exists (select 1 from pg_trigger where tgname='gym_training_session_conflicts' and not tgisinternal) then raise exception 'gym training session conflict trigger missing'; end if;
   if not (select relrowsecurity and relforcerowsecurity from pg_class where oid='public.gym_training_sessions'::regclass) then raise exception 'gym training sessions RLS is not enabled and forced'; end if;
   if not (select relrowsecurity and relforcerowsecurity from pg_class where oid='public.gym_trainers'::regclass) then raise exception 'gym trainers RLS is not enabled and forced'; end if;
   if not (select relrowsecurity and relforcerowsecurity from pg_class where oid='public.gym_attendance'::regclass) then raise exception 'gym attendance RLS is not enabled and forced'; end if;
