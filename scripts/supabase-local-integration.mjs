@@ -108,6 +108,13 @@ console.log("PASS Storage quota: oversized upload rejected at the 1 MiB test lim
 // which destroys the test database and all synthetic Auth users together.
 
 // End-to-end owner registration -> platform approval -> separate trial activation.
+// Negative-path registration and platform authorization checks.
+const unverified=await call("/auth/v1/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:"unverified-owner@novagrid.test",password,email_confirm:false})});
+const unverifiedId=unverified.user?.id||unverified.id;
+assert(unverifiedId,"Unverified test user was not created");
+const unverifiedLogin=await fetch(base+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:anon,"Content-Type":"application/json"},body:JSON.stringify({email:"unverified-owner@novagrid.test",password})});
+assert(!unverifiedLogin.ok,"Unconfirmed email unexpectedly obtained an access token");
+
 const ownerEmail="registration-owner@novagrid.test";
 const adminEmail="platform-admin@novagrid.test";
 const ownerAuth=await call("/auth/v1/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:ownerEmail,password,email_confirm:true})});
@@ -139,11 +146,29 @@ const registrationArgs={
 };
 const orgId=await rpc(ownerToken,"register_organisation",registrationArgs);
 assert(typeof orgId==="string","Registration RPC did not return organisation UUID");
+
+const invalidCategory={...registrationArgs,p_registration_token:crypto.randomUUID(),p_category_key:"not-a-real-category"};
+let invalidCategoryRejected=false;
+try { await rpc(ownerToken,"register_organisation",invalidCategory); } catch(error) { invalidCategoryRejected=String(error).includes("unknown industry category"); }
+assert(invalidCategoryRejected,"Registration accepted an unknown industry category");
+
+const wrongPlan={...registrationArgs,p_registration_token:crypto.randomUUID(),p_plan_key:"not-a-real-plan"};
+let invalidPlanRejected=false;
+try { await rpc(ownerToken,"register_organisation",wrongPlan); } catch(error) { invalidPlanRejected=String(error).includes("unknown plan"); }
+assert(invalidPlanRejected,"Registration accepted an unknown preferred plan");
 const retryId=await rpc(ownerToken,"register_organisation",registrationArgs);
 assert(retryId===orgId,"Registration RPC retry was not idempotent");
 const pending=await fetch(base+`/rest/v1/organisations?id=eq.${orgId}&select=approval_status,lifecycle_status`,{headers:{apikey:anon,Authorization:`Bearer ${ownerToken}`}});
 const pendingRows=await pending.json();
 assert(pending.ok&&pendingRows.length===1&&pendingRows[0].approval_status==="pending","New organisation should remain pending before platform approval");
+let ownerApprovalDenied=false;
+try { await rpc(ownerToken,"decide_organisation_approval",{p_org:orgId,p_decision:"approved",p_category_key:"gym",p_reason:null}); } catch(error) { ownerApprovalDenied=String(error).includes("platform administrators only"); }
+assert(ownerApprovalDenied,"Tenant owner unexpectedly approved an organisation");
+
+let invalidDecisionRejected=false;
+try { await rpc(adminToken,"decide_organisation_approval",{p_org:orgId,p_decision:"activate",p_category_key:"gym",p_reason:null}); } catch(error) { invalidDecisionRejected=String(error).includes("invalid decision"); }
+assert(invalidDecisionRejected,"Platform approval RPC accepted an invalid decision");
+
 await rpc(adminToken,"decide_organisation_approval",{p_org:orgId,p_decision:"approved",p_category_key:"gym",p_reason:null});
 const approved=await fetch(base+`/rest/v1/organisations?id=eq.${orgId}&select=approval_status,lifecycle_status`,{headers:{apikey:anon,Authorization:`Bearer ${adminToken}`}});
 const approvedRows=await approved.json();
@@ -155,6 +180,9 @@ await rpc(adminToken,"assign_subscription",{p_org:orgId,p_plan_key:"trial",p_sta
 const afterActivation=await fetch(base+`/rest/v1/subscriptions?organisation_id=eq.${orgId}&select=id,status`,{headers:{apikey:anon,Authorization:`Bearer ${adminToken}`}});
 const afterRows=await afterActivation.json();
 assert(afterActivation.ok&&afterRows.length===1&&afterRows[0].status==="trial","Separate trial assignment did not create a trial subscription");
+console.log("PASS Auth: unconfirmed email cannot obtain a session");
+console.log("PASS Registration: unknown industry category and plan preference rejected");
+console.log("PASS Platform RBAC: tenant owner cannot approve; invalid admin decision rejected");
 console.log("PASS E2E: confirmed owner registered organisation; retry was idempotent");
 console.log("PASS E2E: organisation remained pending until platform admin approval");
 console.log("PASS E2E: category approval did not activate subscription");
