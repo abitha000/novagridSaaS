@@ -7,7 +7,6 @@ import { archiveContact, createContact, createContacts, listAllContacts, listCon
 import { contactsToCsv, parseContactsCsv, type CsvContactRow } from '../lib/csv'
 import type { Channel, Contact, StaffMember } from '../lib/api/types'
 import { createGymMembership, listGymMemberships, setGymMembershipStatus, type GymMembership } from '../lib/api/gym'
-import { listGymMembershipPlans, type GymMembershipPlan } from '../lib/api/gym-membership-plans'
 import { listGymMembershipPlans, saveGymMembershipPlan, setGymMembershipPlanActive, type GymMembershipPlan } from '../lib/api/gym-membership-plans'
 import { listGymAttendance, saveGymAttendance, type GymAttendanceStatus } from '../lib/api/gym-attendance'
 import { createGymTrainer, listGymTrainers, setGymTrainerStatus, type GymTrainer } from '../lib/api/gym-trainers'
