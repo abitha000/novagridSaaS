@@ -72,3 +72,20 @@ Read-only checks used:
 - Security, Performance and Health Advisors.
 
 No secrets, service-role keys, personal data, or production rows were queried.
+
+
+## Verification refresh — 2026-11-12
+
+Latest merged main commit `64ee0ddb612813f9f8b005f527d94d1185c14152` has green NOVAGRID CI, migration validation, local Supabase integration and isolated preflight script validation. PR #52 adds Storage API tests (own upload/list/signed read/delete, cross-tenant denial, quota rejection); PR #53 adds unconfirmed-email, registration validation and platform approval negative tests. Full PASS details are recorded in `docs/18-local-supabase-integration.md`.
+
+A fresh read-only inspection of the connected hosted project reconfirmed:
+- Migration ledger contains only `20261110084730_create_kv_table_5a875bd1`.
+- Public application schema remains absent; only the Figma KV scaffold table exists.
+- Storage bucket inventory is empty.
+- Legacy `public.rls_auto_enable()` remains callable by `anon` and `authenticated` as SECURITY DEFINER; migration 0009 has not been applied.
+- Security Advisor reports the legacy helper as two WARN findings and the policy-less KV table as one INFO finding.
+- No NOVAGRID hosted application test was run and no hosted schema/data/settings were changed.
+
+GitHub's commit status for the latest merge records Vercel deployment rate limiting for 24 hours. A preview for this exact commit is therefore not available/verified.
+
+The existing NO-GO decision remains. Automated CI success must not be represented as production test readiness.
