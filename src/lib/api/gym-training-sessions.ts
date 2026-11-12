@@ -12,7 +12,7 @@ export type GymTrainingSessionInput = {
  trainer_id:string; member_contact_id:string; starts_at:string; ends_at:string;
  session_type:string; notes?:string
 }
-const selection='id,tenant_id,trainer_id,member_contact_id,starts_at,ends_at,session_type,status,notes,trainer:gym_trainers(contact:contacts(full_name)),member:contacts!gym_training_sessions_member_contact_id_fkey(full_name)'
+const selection='id,tenant_id,trainer_id,member_contact_id,starts_at,ends_at,session_type,status,notes'
 export async function listGymTrainingSessions(tenantId:string,from:string,to:string) {
  const {data,error}=await supabase.from('gym_training_sessions').select(selection)
   .eq('tenant_id',tenantId).gte('starts_at',from).lt('starts_at',to).order('starts_at')
