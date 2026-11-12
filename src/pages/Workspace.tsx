@@ -3,6 +3,7 @@ import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth, useLiveTenant } from '../lib/auth'
 import { LiveGymAttendance, LiveGymMembers, LiveGymMembershipPlans, LiveGymRenewals, LiveGymTrainers, LiveGymTrainingSessions, LiveGymTrainerAvailability, LivePayments, LivePeople, LiveStaff } from './LiveData'
+import { LiveEducation } from './LiveEducation'
 import { listPayments, type PaymentRecord } from '../lib/api/payments'
 import { listNotifications, listRecipients } from '../lib/api/notifications'
 import { supabase } from '../lib/supabase'
@@ -228,6 +229,7 @@ export function ModulePage({ ind, k }: { ind: Ind; k: string }) {
   const toast = useToast()
   const liveTenant = useLiveTenant()
   const add = <Button icon={<I.Plus size={16} />} onClick={() => toast('Create form opened (prototype)', 'info')}>Add</Button>
+  if (ind === 'education' && liveTenant && ['students','classes','attendance','fees'].includes(k)) return <LiveEducation key={liveTenant} tenantId={liveTenant} />
   if (k === 'attendance' && ind === 'gym' && liveTenant) return <LiveGymAttendance key={liveTenant} tenantId={liveTenant} />
   if (k === 'attendance') return <AttendancePage ind={ind} />
   if (k === 'timetables') return <TimetablePage />
