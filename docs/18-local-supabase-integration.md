@@ -16,3 +16,15 @@ This workflow starts an ephemeral Supabase stack inside a GitHub Actions runner.
 This first integration slice does not yet test email confirmation redirects, organisation registration RPC end-to-end, platform admin bootstrap, signed URL read/delete/update, quota overflow, Edge Functions, provider webhooks or backup restoration. It also does not certify the hosted Supabase project configuration. The existing separate manual rehearsal preflight remains available for a disposable hosted project.
 
 The test uses synthetic identities and fixture records only. No production project URL, key or data is used.
+
+
+## Expanded Storage API rehearsal (PR #52)
+
+The local integration workflow now creates files for two disposable tenants and exercises the real Supabase Storage HTTP API:
+- Tenant A and tenant B can each upload their own object.
+- Tenant A can list, download through a signed URL, and delete its own object.
+- Tenant A cannot upload into, list, directly download, sign, or delete tenant B's object.
+- A test-only reduction of the gym starter storage allowance to 1 MiB makes a 2 MiB upload attempt verify quota rejection.
+- Tenant B's object is checked after Tenant A's denied delete to prove it remains intact.
+
+These checks run only against the ephemeral Supabase stack created by GitHub Actions. They do not modify hosted projects. The test suite still does not replace a backup/restore rehearsal or a full production deployment review.
