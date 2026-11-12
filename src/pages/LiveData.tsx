@@ -352,10 +352,10 @@ export function LiveGymRenewals({ tenantId }: { tenantId: string }) {
         {key:'renew',header:'',mobile:'hide',render:r=><Button size="sm" onClick={()=>beginRenewal(r)}>Renew</Button>},
       ]}/>}
     </Card>
-    <Modal open={!!renewing} onClose={()=>setRenewing(null)} title={'Renew '+(renewing?.contact?.full_name ?? 'membership')} footer={<><Button variant="secondary" onClick={()=>setRenewing(null)}>Cancel</Button><Button loading={busy} disabled={!/^\\d+(\\.\\d{1,2})?$/.test(price)||Number(price)<0||!['30','90','180','365'].includes(days)} onClick={()=>void renew()}>Record renewal</Button></>}>
+    <Modal open={!!renewing} onClose={()=>setRenewing(null)} title={'Renew '+(renewing?.contact?.full_name ?? 'membership')} footer={<><Button variant="secondary" onClick={()=>setRenewing(null)}>Cancel</Button><Button loading={busy} disabled={!/^\\d+(\\.\\d{1,2})?$/.test(price)||Number(price)<0||(!/^\\d+$/.test(days)||Number(days)<1||Number(days)>1095)} onClick={()=>void renew()}>Record renewal</Button></>}>
       <div className="space-y-4">
         <Field label="Saved membership plan"><Select value={selectedPlan} onChange={e=>applyRenewalPlan(e.target.value)}><option value="">Keep current/custom duration</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name} · {p.duration_days} days · ₹{(p.price_paise/100).toLocaleString("en-IN")}</option>)}</Select></Field>
-        <Field label="Renewal duration"><Select value={days} onChange={e=>setDays(e.target.value)}><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option></Select></Field>
+        <Field label="Renewal duration"><Select value={days} onChange={e=>setDays(e.target.value)}><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option>{!["30","90","180","365"].includes(days)&&<option value={days}>{days} days (saved plan)</option>}</Select></Field>
         <Field label="Renewal amount (INR)"><Input inputMode="decimal" value={price} onChange={e=>{setSelectedPlan("");setPrice(e.target.value)}}/></Field>
         <p className="text-xs text-ng-mute">A new membership record is created. The previous record is preserved. No payment is collected and no reminder is sent.</p>
       </div>
