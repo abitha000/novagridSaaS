@@ -2,6 +2,11 @@
 create or replace function public.novagrid_schema_version()
 returns integer language sql stable set search_path = '' as $$ select 15 $$;
 
+insert into public.module_catalogue (key,name,scope,industry_category_id)
+select 'gym.sessions','Personal training sessions','industry',id
+from public.industry_categories where key='gym'
+on conflict (key) do nothing;
+
 create table public.gym_training_sessions (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.organisations(id) on delete cascade,
