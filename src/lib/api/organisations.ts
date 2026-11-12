@@ -42,8 +42,23 @@ export async function registerOrganisation(token: string, i: RegistrationInput):
 }
 
 /* ---- Platform administrator operations (all enforced server-side; the UI is not the gate) ---- */
-export const listOrganisationsAdmin = () =>
-  run(supabase.from('organisations').select('id,name,approval_status,lifecycle_status,city,created_at,industry:industry_categories(key,name)').order('created_at', { ascending: false }))
+export type AdminOrganisation = {
+  id: string
+  name: string
+  approval_status: 'pending' | 'approved' | 'rejected'
+  lifecycle_status: string
+  city: string | null
+  created_at: string
+  industry: { key: string; name: string } | null
+}
+
+/** Normalise PostgREST's one-to-one relationship result so callers always receive an object or null. */
+export const listOrganisationsAdmin = async (): Promise<AdminOrganisation[]> => {
+  const rows = await run<Array<Omit<AdminOrganisation, 'industry'> & { industry: AdminOrganisation['industry'] | AdminOrganisation['industry'][] }>>(
+    supabase.from('organisations').select('id,name,approval_status,lifecycle_status,city,created_at,industry:industry_categories(key,name)').order('created_at', { ascending: false }) as never,
+  )
+  return rows.map((row) => ({ ...row, industry: Array.isArray(row.industry) ? row.industry[0] ?? null : row.industry }))
+}
 
 export const decideApproval = (org: string, decision: 'approved' | 'rejected', reason?: string, categoryKey?: string) =>
   run(supabase.rpc('decide_organisation_approval', { p_org: org, p_decision: decision, p_reason: reason ?? null, p_category_key: categoryKey ?? null }))

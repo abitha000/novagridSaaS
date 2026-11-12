@@ -169,9 +169,9 @@ export function SearchBox({ value, onChange, placeholder = 'Search…', classNam
     </div>
   )
 }
-export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Toggle({ on, onChange, label, disabled = false }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
-    <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={cx('relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer', on ? 'bg-ng-indigo' : 'bg-slate-300')}>
+    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className={cx('relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed', on ? 'bg-ng-indigo' : 'bg-slate-300')}>
       <span className={cx('absolute top-0.5 left-0.5 size-5 rounded-full shadow transition-transform', on ? 'translate-x-5 bg-ng-midnight' : 'bg-white')} />
     </button>
   )
@@ -314,13 +314,13 @@ export function EmptyState({ title, body, action, icon }: { title: string; body:
     </div>
   )
 }
-export function ErrorState({ onRetry, body = 'We could not load this data. Check your connection and try again.' }: { onRetry?: () => void; body?: string }) {
+export function ErrorState({ title = 'Something went wrong', onRetry, body = 'We could not load this data. Check your connection and try again.', action }: { title?: string; onRetry?: () => void; body?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center text-center py-14 px-6">
       <div className="size-14 rounded-2xl bg-red-50 text-ng-err grid place-items-center mb-4"><AlertTriangle size={26} /></div>
-      <h3 className="font-semibold">Something went wrong</h3>
+      <h3 className="font-semibold">{title}</h3>
       <p className="text-sm text-ng-mute mt-1 max-w-sm">{body}</p>
-      {onRetry && <Button variant="secondary" className="mt-5" icon={<RefreshCw size={15} />} onClick={onRetry}>Try again</Button>}
+      {action ? <div className="mt-5">{action}</div> : onRetry && <Button variant="secondary" className="mt-5" icon={<RefreshCw size={15} />} onClick={onRetry}>Try again</Button>}
     </div>
   )
 }

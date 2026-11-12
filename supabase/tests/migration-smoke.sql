@@ -433,3 +433,69 @@ begin
   end if;
 end
 $storage_placeholder$;
+
+
+-- Exercise the academic result trigger, not merely its existence.
+do $academic_result_validation$
+declare
+  v_class uuid;
+  v_other_class uuid;
+  v_exam uuid;
+  v_subject uuid;
+  v_wrong_enrolment uuid;
+  v_right_enrolment uuid;
+  v_student uuid;
+  v_rejected boolean;
+begin
+  select id into v_student from public.contacts
+    where tenant_id='20000000-0000-0000-0000-000000000002' and type='student'
+    limit 1;
+  if v_student is null then raise exception 'academic validation fixture student missing'; end if;
+
+  insert into public.edu_classes(tenant_id,name,academic_year,section,created_by)
+  values ('20000000-0000-0000-0000-000000000002','QA Class One','2026-27','A','10000000-0000-0000-0000-000000000002')
+  returning id into v_class;
+  insert into public.edu_classes(tenant_id,name,academic_year,section,created_by)
+  values ('20000000-0000-0000-0000-000000000002','QA Class Two','2026-27','A','10000000-0000-0000-0000-000000000002')
+  returning id into v_other_class;
+
+  insert into public.edu_enrolments(tenant_id,class_id,student_contact_id,roll_number)
+  values ('20000000-0000-0000-0000-000000000002',v_other_class,v_student,'QA-OTHER')
+  returning id into v_wrong_enrolment;
+  insert into public.edu_enrolments(tenant_id,class_id,student_contact_id,roll_number)
+  values ('20000000-0000-0000-0000-000000000002',v_class,v_student,'QA-CORRECT')
+  returning id into v_right_enrolment;
+
+  insert into public.edu_exams(tenant_id,name,academic_year,starts_on,ends_on)
+  values ('20000000-0000-0000-0000-000000000002','QA Exam','2026-27',current_date,current_date)
+  returning id into v_exam;
+  insert into public.edu_exam_subjects(tenant_id,exam_id,class_id,subject,exam_date,max_marks,pass_marks)
+  values ('20000000-0000-0000-0000-000000000002',v_exam,v_class,'Mathematics',current_date,100,35)
+  returning id into v_subject;
+
+  v_rejected:=false;
+  begin
+    insert into public.edu_exam_results(tenant_id,exam_subject_id,enrolment_id,marks)
+    values ('20000000-0000-0000-0000-000000000002',v_subject,v_right_enrolment,101);
+  exception when check_violation then v_rejected:=true;
+  end;
+  if not v_rejected then raise exception 'academic result trigger accepted marks above maximum'; end if;
+
+  v_rejected:=false;
+  begin
+    insert into public.edu_exam_results(tenant_id,exam_subject_id,enrolment_id,marks)
+    values ('20000000-0000-0000-0000-000000000002',v_subject,v_wrong_enrolment,80);
+  exception when check_violation then v_rejected:=true;
+  end;
+  if not v_rejected then raise exception 'academic result trigger accepted enrolment from another class'; end if;
+
+  update public.edu_enrolments set status='withdrawn' where id=v_right_enrolment;
+  v_rejected:=false;
+  begin
+    insert into public.edu_exam_results(tenant_id,exam_subject_id,enrolment_id,marks)
+    values ('20000000-0000-0000-0000-000000000002',v_subject,v_right_enrolment,80);
+  exception when check_violation then v_rejected:=true;
+  end;
+  if not v_rejected then raise exception 'academic result trigger accepted inactive enrolment'; end if;
+end
+$academic_result_validation$;
