@@ -36,10 +36,12 @@ do $$
 declare v int; r record;
 begin
   select public.novagrid_schema_version() into v;
-  if v <> 13 then raise exception 'schema version expected 13, got %', v; end if;
+  if v <> 14 then raise exception 'schema version expected 14, got %', v; end if;
   if (select count(*) from public.industry_categories) < 10 then raise exception 'industry seeds missing'; end if;
   if (select count(*) from public.roles where tenant_id is null) < 6 then raise exception 'system roles missing'; end if;
   if to_regclass('public.gym_attendance') is null then raise exception 'gym attendance table missing'; end if;
+  if to_regclass('public.gym_trainers') is null then raise exception 'gym trainers table missing'; end if;
+  if not (select relrowsecurity and relforcerowsecurity from pg_class where oid='public.gym_trainers'::regclass) then raise exception 'gym trainers RLS is not enabled and forced'; end if;
   if not (select relrowsecurity and relforcerowsecurity from pg_class where oid='public.gym_attendance'::regclass) then raise exception 'gym attendance RLS is not enabled and forced'; end if;
   for r in select tablename from pg_tables where schemaname='public' and tablename <> 'kv_store_5a875bd1' loop
     if not (select relrowsecurity and relforcerowsecurity from pg_class where oid = format('public.%I',r.tablename)::regclass) then

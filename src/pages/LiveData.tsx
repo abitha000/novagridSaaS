@@ -8,6 +8,7 @@ import { contactsToCsv, parseContactsCsv, type CsvContactRow } from '../lib/csv'
 import type { Channel, Contact, StaffMember } from '../lib/api/types'
 import { createGymMembership, listGymMemberships, setGymMembershipStatus, type GymMembership } from '../lib/api/gym'
 import { listGymAttendance, saveGymAttendance, type GymAttendanceStatus } from '../lib/api/gym-attendance'
+import { createGymTrainer, listGymTrainers, setGymTrainerStatus, type GymTrainer } from '../lib/api/gym-trainers'
 
 const SchemaNote = ({ e }: { e: unknown }) =>
   e instanceof BackendError && e.kind === 'schema_missing' ? (
@@ -346,6 +347,60 @@ export function LiveGymRenewals({ tenantId }: { tenantId: string }) {
         <Field label="Renewal duration"><Select value={days} onChange={e=>setDays(e.target.value)}><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option></Select></Field>
         <Field label="Renewal amount (INR)"><Input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)}/></Field>
         <p className="text-xs text-ng-mute">A new membership record is created. The previous record is preserved. No payment is collected and no reminder is sent.</p>
+      </div>
+    </Modal>
+  </>
+}
+
+
+/* ---------------- Gym trainers (live) ---------------- */
+export function LiveGymTrainers({ tenantId }: { tenantId: string }) {
+  const toast = useToast()
+  const [rows,setRows] = useState<GymTrainer[]|null>(null)
+  const [people,setPeople] = useState<Contact[]>([])
+  const [query,setQuery] = useState('')
+  const [error,setError] = useState<unknown>(null)
+  const [open,setOpen] = useState(false)
+  const [busy,setBusy] = useState(false)
+  const [form,setForm] = useState({contact_id:'',specialty:'Strength & conditioning',bio:''})
+  const load = useCallback(async()=>{
+    setError(null)
+    try {
+      const [trainers,contacts]=await Promise.all([listGymTrainers(tenantId),listAllContacts(tenantId)])
+      setRows(trainers)
+      const linked=new Set(trainers.map(t=>t.contact_id))
+      setPeople(contacts.filter(c=>['person','staff','trainer'].includes(c.type)&&!linked.has(c.id)))
+    } catch(e) {setError(e);setRows([])}
+  },[tenantId])
+  useEffect(()=>{void load()},[load])
+  const filtered=(rows??[]).filter(r=>[r.contact?.full_name??'',r.specialty,r.contact?.phone_e164??''].some(v=>v.toLowerCase().includes(query.toLowerCase())))
+  const active=(rows??[]).filter(r=>r.status==='active').length
+  const act=async(r:GymTrainer,status:GymTrainer['status'])=>{
+    try{await setGymTrainerStatus(r.id,status);toast(status==='active'?'Trainer activated':'Trainer deactivated');await load()}
+    catch(e){toast(errorMessage(e),'err')}
+  }
+  return <>
+    <PageHeader title="Trainers" sub="Live trainer profiles for this organisation." actions={<Button icon={<I.UserPlus size={16}/>} onClick={()=>setOpen(true)}>Add trainer</Button>}/>
+    <SchemaNote e={error}/>
+    <div className="grid sm:grid-cols-2 gap-4 mb-4">
+      <Stat label="Total trainers" value={String(rows?.length??'—')} icon={<I.Users size={18}/>}/>
+      <Stat label="Active trainers" value={String(rows?active:'—')} icon={<I.UserCheck size={18}/>}/>
+    </div>
+    <Card>
+      <div className="p-4 border-b border-ng-line"><SearchBox value={query} onChange={setQuery} placeholder="Search trainer or speciality" className="sm:w-80"/></div>
+      {error && !(error instanceof BackendError&&error.kind==='schema_missing')?<ErrorState onRetry={()=>void load()} body={errorMessage(error)}/>:
+      <DataTable loading={rows===null} rows={filtered} empty={<EmptyState title="No trainers yet" body="Add a contact first, then register them as a trainer." action={<Button onClick={()=>setOpen(true)}>Add trainer</Button>}/>} cols={[
+        {key:'name',header:'Trainer',mobile:'title',render:r=><div className="flex items-center gap-3"><Avatar name={r.contact?.full_name??'Trainer'}/><div><div className="font-medium">{r.contact?.full_name??'Trainer'}</div><div className="text-xs text-ng-mute">{r.contact?.phone_e164??r.contact?.email??'—'}</div></div></div>},
+        {key:'specialty',header:'Speciality',render:r=><div><div className="font-medium">{r.specialty}</div>{r.bio&&<div className="text-xs text-ng-mute">{r.bio}</div>}</div>},
+        {key:'status',header:'Status',render:r=><Status value={r.status}/>},
+        {key:'actions',header:'',mobile:'hide',render:r=><Button size="sm" variant="secondary" onClick={()=>void act(r,r.status==='active'?'inactive':'active')}>{r.status==='active'?'Deactivate':'Activate'}</Button>}
+      ]}/>}
+    </Card>
+    <Modal open={open} onClose={()=>setOpen(false)} title="Add trainer" footer={<><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button loading={busy} disabled={!form.contact_id||form.specialty.trim().length<2} onClick={async()=>{setBusy(true);try{await createGymTrainer(tenantId,form);toast('Trainer added');setOpen(false);setForm({contact_id:'',specialty:'Strength & conditioning',bio:''});await load()}catch(e){toast(errorMessage(e),'err')}finally{setBusy(false)}}}>Save trainer</Button></>}>
+      <div className="space-y-4">
+        <Field label="Trainer contact"><Select value={form.contact_id} onChange={e=>setForm({...form,contact_id:e.target.value})}><option value="">Choose a contact</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</Select></Field>
+        <Field label="Speciality"><Input value={form.specialty} onChange={e=>setForm({...form,specialty:e.target.value})}/></Field>
+        <Field label="Bio (optional)"><Input value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})}/></Field>
       </div>
     </Modal>
   </>
