@@ -7,6 +7,7 @@ import { archiveContact, createContact, createContacts, listAllContacts, listCon
 import { contactsToCsv, parseContactsCsv, type CsvContactRow } from '../lib/csv'
 import type { Channel, Contact, StaffMember } from '../lib/api/types'
 import { createGymMembership, listGymMemberships, setGymMembershipStatus, type GymMembership } from '../lib/api/gym'
+import { listGymMembershipPlans, saveGymMembershipPlan, setGymMembershipPlanActive, type GymMembershipPlan } from '../lib/api/gym-membership-plans'
 import { listGymAttendance, saveGymAttendance, type GymAttendanceStatus } from '../lib/api/gym-attendance'
 import { createGymTrainer, listGymTrainers, setGymTrainerStatus, type GymTrainer } from '../lib/api/gym-trainers'
 import { createGymTrainingSession, listGymTrainingSessions, setGymTrainingSessionStatus, type GymTrainingSession } from '../lib/api/gym-training-sessions'
@@ -565,6 +566,50 @@ export function LiveGymTrainerAvailability({ tenantId }: { tenantId:string }) {
     <Field label="Starts"><Input type="datetime-local" value={leaveForm.starts_at} onChange={e=>setLeaveForm({...leaveForm,starts_at:e.target.value})}/></Field>
     <Field label="Ends"><Input type="datetime-local" value={leaveForm.ends_at} onChange={e=>setLeaveForm({...leaveForm,ends_at:e.target.value})}/></Field>
     <Field label="Reason (optional)"><Input value={leaveForm.reason} onChange={e=>setLeaveForm({...leaveForm,reason:e.target.value})}/></Field>
+   </div>
+  </Modal>
+ </>
+}
+
+
+/* ---------------- Gym membership plan catalogue (live) ---------------- */
+export function LiveGymMembershipPlans({tenantId}:{tenantId:string}){
+ const toast=useToast()
+ const [rows,setRows]=useState<GymMembershipPlan[]|null>(null)
+ const [error,setError]=useState<unknown>(null)
+ const [open,setOpen]=useState(false)
+ const [busy,setBusy]=useState(false)
+ const [editing,setEditing]=useState<GymMembershipPlan|null>(null)
+ const [form,setForm]=useState({name:'',duration:'30',price:'1800',description:''})
+ const load=useCallback(async()=>{setError(null);try{setRows(await listGymMembershipPlans(tenantId))}catch(e){setError(e);setRows([])}},[tenantId])
+ useEffect(()=>{void load()},[load])
+ const start=(r?:GymMembershipPlan)=>{setEditing(r??null);setForm(r?{name:r.name,duration:String(r.duration_days),price:(r.price_paise/100).toFixed(2).replace(/\.00$/,''),description:r.description??''}:{name:'',duration:'30',price:'1800',description:''});setOpen(true)}
+ const save=async()=>{setBusy(true);try{await saveGymMembershipPlan(tenantId,{id:editing?.id,name:form.name,duration_days:Number(form.duration),price_paise:Math.round(Number(form.price)*100),description:form.description});toast(editing?'Plan updated':'Plan created');setOpen(false);await load()}catch(e){toast(errorMessage(e),'err')}finally{setBusy(false)}}
+ const toggle=async(r:GymMembershipPlan)=>{try{await setGymMembershipPlanActive(tenantId,r.id,!r.is_active);toast(r.is_active?'Plan archived':'Plan activated');await load()}catch(e){toast(errorMessage(e),'err')}}
+ const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n/100)
+ return <>
+  <PageHeader title="Membership plans" sub="Create reusable gym packages and pricing." actions={<Button icon={<I.Plus size={16}/>} onClick={()=>start()}>Add plan</Button>}/>
+  <SchemaNote e={error}/>
+  <div className="grid sm:grid-cols-2 gap-4 mb-4">
+   <Stat label="Total plans" value={String(rows?.length??'—')} icon={<I.Layers size={18}/>}/>
+   <Stat label="Active plans" value={String(rows?.filter(x=>x.is_active).length??'—')} icon={<I.BadgeCheck size={18}/>}/>
+  </div>
+  <Card>
+   {error&&!(error instanceof BackendError&&error.kind==='schema_missing')?<ErrorState onRetry={()=>void load()} body={errorMessage(error)}/>:
+   <DataTable loading={rows===null} rows={rows??[]} empty={<EmptyState title="No membership plans" body="Create your first reusable package." action={<Button onClick={()=>start()}>Add plan</Button>}/>} cols={[
+    {key:'name',header:'Plan',mobile:'title',render:r=><div><div className="font-medium">{r.name}</div><div className="text-xs text-ng-mute">{r.description??'No description'}</div></div>},
+    {key:'duration',header:'Duration',render:r=>r.duration_days+' days'},
+    {key:'price',header:'Price',render:r=><span className="font-medium">{money(r.price_paise)}</span>},
+    {key:'status',header:'Status',render:r=><Status value={r.is_active?'active':'inactive'}/>},
+    {key:'actions',header:'',mobile:'hide',render:r=><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={()=>start(r)}>Edit</Button><Button size="sm" variant="secondary" onClick={()=>void toggle(r)}>{r.is_active?'Archive':'Activate'}</Button></div>}
+   ]}/>}
+  </Card>
+  <Modal open={open} onClose={()=>setOpen(false)} title={editing?'Edit membership plan':'Create membership plan'} footer={<><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button loading={busy} disabled={form.name.trim().length<2||!/^\d+$/.test(form.duration)||Number(form.duration)<1||Number(form.duration)>1095||!/^\d+(\.\d{1,2})?$/.test(form.price)||Number(form.price)<0} onClick={()=>void save()}>Save plan</Button></>}>
+   <div className="space-y-4">
+    <Field label="Plan name"><Input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Monthly, Quarterly, Annual"/></Field>
+    <Field label="Duration (days)"><Input type="number" value={form.duration} onChange={e=>setForm({...form,duration:e.target.value})}/></Field>
+    <Field label="Price (₹)"><Input type="number" value={form.price} onChange={e=>setForm({...form,price:e.target.value})}/></Field>
+    <Field label="Description"><Input value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></Field>
    </div>
   </Modal>
  </>

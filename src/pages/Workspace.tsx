@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as I from 'lucide-react'
 import { Link, go } from '../lib/router'
 import { useAuth, useLiveTenant } from '../lib/auth'
-import { LiveGymAttendance, LiveGymMembers, LiveGymRenewals, LiveGymTrainers, LiveGymTrainingSessions, LiveGymTrainerAvailability, LivePayments, LivePeople, LiveStaff } from './LiveData'
+import { LiveGymAttendance, LiveGymMembers, LiveGymMembershipPlans, LiveGymRenewals, LiveGymTrainers, LiveGymTrainingSessions, LiveGymTrainerAvailability, LivePayments, LivePeople, LiveStaff } from './LiveData'
 import { listPayments, type PaymentRecord } from '../lib/api/payments'
 import { listNotifications, listRecipients } from '../lib/api/notifications'
 import { supabase } from '../lib/supabase'
@@ -15,7 +15,7 @@ export const isInd = (s: string): s is Ind => ['gym', 'education', 'hospital', '
 
 type Mod = [key: string, label: string, icon: I.LucideIcon]
 const modules: Record<Ind, Mod[]> = {
-  gym: [['members', 'Members', I.Users], ['memberships', 'Memberships', I.IdCard], ['attendance', 'Attendance', I.ScanLine], ['trainers', 'Trainers', I.Dumbbell], ['sessions', 'Training sessions', I.CalendarClock], ['availability', 'Trainer availability', I.Clock], ['renewals', 'Renewals', I.RefreshCcw]],
+  gym: [['members', 'Members', I.Users], ['memberships', 'Memberships', I.IdCard], ['plans', 'Membership plans', I.Layers], ['attendance', 'Attendance', I.ScanLine], ['trainers', 'Trainers', I.Dumbbell], ['sessions', 'Training sessions', I.CalendarClock], ['availability', 'Trainer availability', I.Clock], ['renewals', 'Renewals', I.RefreshCcw]],
   education: [['students', 'Students', I.GraduationCap], ['parents', 'Parents', I.HeartHandshake], ['teachers', 'Teachers', I.Presentation], ['classes', 'Classes', I.School], ['attendance', 'Attendance', I.ScanLine], ['fees', 'Fees', I.Wallet], ['transport', 'Transport', I.Bus], ['timetables', 'Timetables', I.CalendarDays], ['examinations', 'Examinations', I.FileCheck2]],
   hospital: [['patients', 'Patients', I.HeartPulse], ['appointments', 'Appointments', I.CalendarCheck], ['doctors', 'Doctors', I.Stethoscope], ['queue', 'Queue', I.ListOrdered], ['departments', 'Departments', I.Hospital]],
   hotel: [['rooms', 'Rooms', I.BedDouble], ['reservations', 'Reservations', I.BookmarkCheck], ['checkin', 'Check-in / out', I.DoorOpen], ['housekeeping', 'Housekeeping', I.SprayCan], ['guests', 'Guests', I.Users]],
@@ -239,6 +239,7 @@ export function ModulePage({ ind, k }: { ind: Ind; k: string }) {
   if (k === 'sessions' && ind === 'gym' && liveTenant) return <LiveGymTrainingSessions key={liveTenant} tenantId={liveTenant} />
   if (k === 'availability' && ind === 'gym' && liveTenant) return <LiveGymTrainerAvailability key={liveTenant} tenantId={liveTenant} />
   if (k === 'trainers') return <Simple title="Trainers" sub="4 trainers · 2 personal-training slots free today" action={add} rows={[{ id: 1, n: 'Neha Iyer', s: 'Strength & conditioning', c: 62 }, { id: 2, n: 'Karan Joshi', s: 'Yoga & mobility', c: 48 }, { id: 3, n: 'Samir Khan', s: 'Weight loss', c: 55 }]} cols={[{ key: 'n', header: 'Trainer', mobile: 'title', render: (r: { n: string }) => <div className="flex items-center gap-3"><Avatar name={r.n} /><span className="font-medium">{r.n}</span></div> }, { key: 's', header: 'Speciality' }, { key: 'c', header: 'Clients' }]} />
+  if (k === 'plans' && ind === 'gym' && liveTenant) return <LiveGymMembershipPlans key={liveTenant} tenantId={liveTenant} />
   if (k === 'renewals' && ind === 'gym' && liveTenant) return <LiveGymRenewals key={liveTenant} tenantId={liveTenant} />
   if (k === 'renewals') return <RenewalsPage ind={ind} />
   if (k === 'students') return <Simple title="Students" sub="8,420 enrolled" action={add} rows={students} cols={[{ key: 'name', header: 'Student', mobile: 'title', render: (r: (typeof students)[0]) => <div className="flex items-center gap-3"><Avatar name={r.name} /><span className="font-medium">{r.name}</span></div> }, { key: 'klass', header: 'Class' }, { key: 'bus', header: 'Bus' }, { key: 'att', header: 'Attendance' }, { key: 'fee', header: 'Fees', render: (r: (typeof students)[0]) => <Status value={r.fee} /> }]} />
