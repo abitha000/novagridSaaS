@@ -42,6 +42,7 @@ begin
   if to_regclass('public.gym_attendance') is null then raise exception 'gym attendance table missing'; end if;
   if to_regclass('public.gym_trainers') is null then raise exception 'gym trainers table missing'; end if;
   if to_regclass('public.gym_training_sessions') is null then raise exception 'gym training sessions table missing'; end if;
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='organisations' and column_name='timezone') then raise exception 'organisation timezone column missing'; end if;
   if to_regclass('public.gym_trainer_availability') is null or to_regclass('public.gym_trainer_time_off') is null then raise exception 'trainer availability tables missing'; end if;
   if not exists (select 1 from pg_trigger where tgname='gym_training_session_availability' and not tgisinternal) then raise exception 'trainer availability enforcement trigger missing'; end if;
   if not exists (select 1 from pg_trigger where tgname='gym_training_session_conflicts' and not tgisinternal) then raise exception 'gym training session conflict trigger missing'; end if;
