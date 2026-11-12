@@ -76,3 +76,38 @@ Use disposable test organisations only after the reviewed migrations have been a
 - No notification provider dispatcher or webhook handler is implemented yet.
 - Gym and Education domain-specific tables/flows are not part of these ten migrations.
 - A green migration smoke test is not a substitute for application-level, adversarial RLS tests or a backup/restore rehearsal.
+
+
+## Release-gate evidence update — 2026-11-12
+
+Latest merged main commit: `64ee0ddb612813f9f8b005f527d94d1185c14152` (PRs #52 and #53 included).
+
+All four GitHub Actions workflows passed on that exact commit:
+- NOVAGRID CI (frontend build and PostgreSQL migration job)
+- Supabase migration validation
+- Supabase local integration
+- Supabase isolated-project preflight script validation
+
+The local Supabase integration log explicitly passed:
+- Two Auth users signing in and tenant A/B PostgREST row isolation
+- Anonymous organisation data isolation
+- Own-tenant Storage upload, list, signed read and delete
+- Cross-tenant Storage list, download, signed URL, upload and delete denial
+- Storage quota rejection for a 2 MiB upload against a deliberately reduced 1 MiB fixture quota
+- Unconfirmed-email login denial
+- Registration rejection for unknown category and unavailable plan
+- Tenant-owner approval denial and invalid platform decision rejection
+- Registration idempotency, pending approval, separate trial assignment
+- Staff role and tenant-role ownership restrictions
+
+These are disposable local Supabase tests. They do not certify a hosted rehearsal, >1,000-object pagination, concurrent quota race behavior, signed URL expiry timing, suspended/expired tenant Storage denial, backup restoration, or production deployment.
+
+### Current hosted deployment and Supabase evidence
+
+- Latest Vercel deployment status on the merge commit reports `Deployment rate limited — retry in 24 hours`; no preview deployment for this commit is verified.
+- The connected hosted Supabase project remains on the original Figma KV scaffold migration only. No NOVAGRID relational migrations or Storage bucket are installed.
+- Supabase Security Advisor still reports the legacy `public.rls_auto_enable()` SECURITY DEFINER function executable by `anon` and `authenticated`; migration 0009 is still unapplied.
+- The KV table's RLS-without-policy INFO finding is intentional; do not expose it.
+- No backup inventory/restore verification is available through the connected project tools.
+
+**Decision: NO-GO for production testing against the hosted project.** Do not apply production DDL, bootstrap an administrator, or deploy functions until backup/restore and controlled rollout gates are satisfied.
