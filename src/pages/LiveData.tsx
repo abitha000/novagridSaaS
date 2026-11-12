@@ -7,6 +7,7 @@ import { archiveContact, createContact, createContacts, listAllContacts, listCon
 import { contactsToCsv, parseContactsCsv, type CsvContactRow } from '../lib/csv'
 import type { Channel, Contact, StaffMember } from '../lib/api/types'
 import { createGymMembership, listGymMemberships, setGymMembershipStatus, type GymMembership } from '../lib/api/gym'
+import { createPayment, listPayments, type PaymentRecord } from '../lib/api/payments'
 import { listGymMembershipPlans, saveGymMembershipPlan, setGymMembershipPlanActive, type GymMembershipPlan } from '../lib/api/gym-membership-plans'
 import { listGymAttendance, saveGymAttendance, type GymAttendanceStatus } from '../lib/api/gym-attendance'
 import { createGymTrainer, listGymTrainers, setGymTrainerStatus, type GymTrainer } from '../lib/api/gym-trainers'
@@ -121,16 +122,16 @@ export function LivePeople({ tenantId }: { tenantId: string }) {
 }
 
 /* ---------------- Payments (live, manual records only) ---------------- */
-import { createPayment, listPayments, type PaymentRecord } from '../lib/api/payments'
 export function LivePayments({ tenantId }: { tenantId: string }) {
   const toast = useToast()
   const [rows, setRows] = useState<PaymentRecord[] | null>(null)
   const [people, setPeople] = useState<Contact[]>([])
+  const [memberships, setMemberships] = useState<GymMembership[]>([])
   const [err, setErr] = useState<unknown>(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState({ contact_id: '', amount: '', method: 'upi' as PaymentRecord['method'], paid_at: new Date().toISOString().slice(0, 10), reference: '', notes: '' })
-  const load = useCallback(() => { setErr(null); Promise.all([listPayments(tenantId), listContacts(tenantId, { pageSize: 500 })]).then(([p,c]) => { setRows(p); setPeople(c.rows) }).catch((e) => { setErr(e); setRows([]) }) }, [tenantId])
+  const [form, setForm] = useState({ contact_id: '', amount: '', method: 'upi' as PaymentRecord['method'], paid_at: new Date().toISOString().slice(0, 10), reference: '', notes: '', membership_id: '' })
+  const load = useCallback(() => { setErr(null); Promise.all([listPayments(tenantId), listContacts(tenantId, { pageSize: 500 }), listGymMemberships(tenantId)]).then(([p,c,m]) => { setRows(p); setPeople(c.rows); setMemberships(m) }).catch((e) => { setErr(e); setRows([]) }) }, [tenantId])
   useEffect(load, [load])
   const money = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(paise / 100)
   const collected = (rows ?? []).filter(r => r.status === 'received').reduce((n,r) => n + r.amount_paise, 0)
@@ -141,14 +142,15 @@ export function LivePayments({ tenantId }: { tenantId: string }) {
     <Card>{err && !(err instanceof BackendError && err.kind === 'schema_missing') ? <ErrorState onRetry={load} body={errorMessage(err)}/> : <DataTable loading={rows === null} rows={rows ?? []} empty={<EmptyState title="No payments recorded" body="Record a customer payment to start your ledger." action={<Button onClick={() => setOpen(true)}>Record payment</Button>}/>} cols={[
       {key:'person',header:'Customer',mobile:'title',render:r=><span className="font-medium">{r.contact?.full_name ?? 'Customer'}</span>},
       {key:'amount',header:'Amount',render:r=><span className="font-semibold tabular-nums">{money(r.amount_paise)}</span>},
-      {key:'method',header:'Method',render:r=>r.method.replace('_',' ')},
+      {key:'method',header:'Method',render:r=><div>{r.method.replace('_',' ')}{r.membership_id&&<div className="text-xs text-ng-mute">Membership linked</div>}</div>},
       {key:'date',header:'Paid on',render:r=>new Date(r.paid_at).toLocaleDateString('en-IN')},
       {key:'ref',header:'Reference',render:r=>r.reference || '—'},
       {key:'status',header:'Status',render:r=><Status value={r.status === 'received' ? 'Received' : r.status}/>}
     ]}/>}</Card>
-    <Modal open={open} onClose={() => setOpen(false)} title="Record a payment" footer={<><Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button loading={busy} disabled={!form.contact_id || !/^\d+(\.\d{1,2})?$/.test(form.amount) || Number(form.amount) <= 0} onClick={async () => { setBusy(true); try { await createPayment(tenantId,{contact_id:form.contact_id,amount_paise:Math.round(Number(form.amount)*100),method:form.method,paid_at:new Date(form.paid_at+'T12:00:00').toISOString(),reference:form.reference,notes:form.notes}); toast('Payment recorded'); setOpen(false); setForm({...form,contact_id:'',amount:'',reference:'',notes:''}); load() } catch(e) { toast(errorMessage(e),'err') } finally { setBusy(false) } }}>Save payment</Button></>}>
+    <Modal open={open} onClose={() => setOpen(false)} title="Record a payment" footer={<><Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button loading={busy} disabled={!form.contact_id || !/^\d+(\.\d{1,2})?$/.test(form.amount) || Number(form.amount) <= 0} onClick={async () => { setBusy(true); try { await createPayment(tenantId,{contact_id:form.contact_id,amount_paise:Math.round(Number(form.amount)*100),membership_id:form.membership_id||null,method:form.method,paid_at:new Date(form.paid_at+'T12:00:00').toISOString(),reference:form.reference,notes:form.notes}); toast('Payment recorded'); setOpen(false); setForm({...form,contact_id:'',membership_id:'',amount:'',reference:'',notes:''}); load() } catch(e) { toast(errorMessage(e),'err') } finally { setBusy(false) } }}>Save payment</Button></>}>
       <div className="space-y-4">
-        <Field label="Customer"><Select value={form.contact_id} onChange={e=>setForm({...form,contact_id:e.target.value})}><option value="">Choose customer</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</Select></Field>
+        <Field label="Customer"><Select value={form.contact_id} onChange={e=>setForm({...form,contact_id:e.target.value,membership_id:''})}><option value="">Choose customer</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</Select></Field>
+        <Field label="Membership (optional)"><Select value={form.membership_id} onChange={e=>setForm({...form,membership_id:e.target.value})}><option value="">General payment — not linked</option>{memberships.filter(m=>m.contact_id===form.contact_id).map(m=><option key={m.id} value={m.id}>{m.plan_name} · {m.start_date} to {m.end_date}</option>)}</Select></Field>
         <Field label="Amount (INR)"><Input inputMode="decimal" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="e.g. 1500.00"/></Field>
         <Field label="Payment method"><Select value={form.method} onChange={e=>setForm({...form,method:e.target.value as PaymentRecord['method']})}>{[['cash','Cash'],['upi','UPI'],['bank_transfer','Bank transfer'],['card','Card'],['cheque','Cheque'],['other','Other']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field>
         <Field label="Payment date"><Input type="date" value={form.paid_at} onChange={e=>setForm({...form,paid_at:e.target.value})}/></Field>

@@ -5,6 +5,7 @@ export type PaymentRecord = {
   id: string
   tenant_id: string
   contact_id: string
+  membership_id?: string | null
   amount_paise: number
   currency: 'INR'
   method: 'cash' | 'upi' | 'bank_transfer' | 'card' | 'cheque' | 'other'
@@ -18,6 +19,7 @@ export type PaymentRecord = {
 }
 export type PaymentInput = {
   contact_id: string
+  membership_id: string | null
   amount_paise: number
   method: PaymentRecord['method']
   paid_at: string
@@ -27,7 +29,7 @@ export type PaymentInput = {
 
 export async function listPayments(tenantId: string) {
   const { data, error } = await supabase.from('payment_records')
-    .select('id,tenant_id,contact_id,amount_paise,currency,method,status,source,reference,notes,paid_at,created_at,contact:contacts(full_name)')
+    .select('id,tenant_id,contact_id,membership_id,amount_paise,currency,method,status,source,reference,notes,paid_at,created_at,contact:contacts(full_name)')
     .eq('tenant_id', tenantId).order('paid_at', { ascending: false }).limit(500)
   if (error) throw toBackendError(error)
   return (data ?? []) as unknown as PaymentRecord[]
