@@ -14,6 +14,11 @@ export const createTemplate = (tenantId: string, t: { channel: Channel; name: st
   return run<Template>(supabase.from('notification_templates').insert({ tenant_id: tenantId, channel: t.channel, name: t.name.trim(), body: t.body, dlt_template_id: t.dlt_template_id ?? null, provider_status: 'draft' }).select().single() as never)
 }
 
+export const updateDraftTemplate = (tenantId: string, id: string, t: { channel: Channel; name: string; body: string; dlt_template_id?: string }) => {
+  if (t.name.trim().length < 2 || t.body.trim().length < 5) throw new BackendError('Template name and body are required.', 'validation')
+  return run<Template>(supabase.from('notification_templates').update({ channel: t.channel, name: t.name.trim(), body: t.body, dlt_template_id: t.dlt_template_id ?? null }).eq('tenant_id', tenantId).eq('id', id).eq('provider_status', 'draft').select().single() as never)
+}
+
 export const listNotifications = (tenantId: string) =>
   run<NotificationRow[]>(supabase.from('notifications').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(50) as never)
 

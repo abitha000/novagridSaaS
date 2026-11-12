@@ -4,7 +4,7 @@ import { Avatar, Badge, Button, Card, CardHeader, Chips, Confirm, DataTable, Emp
 import { students } from '../data'
 import type { Ind } from './Workspace'
 import { useLiveTenant } from '../lib/auth'
-import { createTemplate, listNotifications, listRecipients, listTemplates } from '../lib/api/notifications'
+import { createTemplate, listNotifications, listRecipients, listTemplates, updateDraftTemplate } from '../lib/api/notifications'
 import type { NotificationRow, RecipientRow, Template } from '../lib/api/types'
 import { errorMessage } from '../lib/api/errors'
 import { listAllContacts, recordConsent } from '../lib/api/contacts'
@@ -186,6 +186,7 @@ function LiveComms({ tenantId }: { tenantId: string }) {
   const [recipients, setRecipients] = useState<RecipientRow[] | null>(null)
   const [error, setError] = useState('')
   const [templateOpen, setTemplateOpen] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<{ name: string; channel: 'whatsapp' | 'sms' | 'email'; body: string; dlt_template_id: string }>({ name: '', channel: 'whatsapp', body: '', dlt_template_id: '' })
   const toast = useToast()
@@ -216,9 +217,11 @@ function LiveComms({ tenantId }: { tenantId: string }) {
   const saveTemplate = async () => {
     setSaving(true)
     try {
-      await createTemplate(tenantId, { ...draft, dlt_template_id: draft.dlt_template_id || undefined })
-      toast('Draft template saved')
+      if (editingTemplate) await updateDraftTemplate(tenantId, editingTemplate.id, { ...draft, dlt_template_id: draft.dlt_template_id || undefined })
+      else await createTemplate(tenantId, { ...draft, dlt_template_id: draft.dlt_template_id || undefined })
+      toast(editingTemplate ? 'Draft template updated' : 'Draft template saved')
       setTemplateOpen(false)
+      setEditingTemplate(null)
       setDraft({ name: '', channel: 'whatsapp', body: '', dlt_template_id: '' })
       const rows = await listTemplates(tenantId)
       setTemplatesLive(rows)
@@ -245,9 +248,9 @@ function LiveComms({ tenantId }: { tenantId: string }) {
       ]}/></Card>
     </div>}
     {tab === 'templates' && <div className="mt-5 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-ng-mute">Templates are stored as drafts until provider approval. Saving a template does not send a message.</p><Button icon={<I.Plus size={16}/>} onClick={() => setTemplateOpen(true)}>New draft template</Button></div>
+      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-ng-mute">Templates are stored as drafts until provider approval. Saving a template does not send a message.</p><Button icon={<I.Plus size={16}/>} onClick={() => {setEditingTemplate(null);setDraft({name:"",channel:"whatsapp",body:"",dlt_template_id:""});setTemplateOpen(true)}}>New draft template</Button></div>
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {(templatesLive ?? []).map(t => <Card key={t.id} className="p-5"><div className="flex justify-between gap-2"><b>{t.name}</b><Status value={t.provider_status}/></div><Badge tone="neutral" dot={false}>{t.channel.toUpperCase()}</Badge><p className="mt-3 text-sm text-ng-mute whitespace-pre-wrap">{t.body}</p>{t.dlt_template_id && <p className="mt-3 text-xs text-ng-mute">DLT ID: {t.dlt_template_id}</p>}</Card>)}
+        {(templatesLive ?? []).map(t => <Card key={t.id} className="p-5"><div className="flex justify-between gap-2"><b>{t.name}</b><Status value={t.provider_status}/></div><Badge tone="neutral" dot={false}>{t.channel.toUpperCase()}</Badge><p className="mt-3 text-sm text-ng-mute whitespace-pre-wrap">{t.body}</p>{t.dlt_template_id && <p className="mt-3 text-xs text-ng-mute">DLT ID: {t.dlt_template_id}</p>}{t.provider_status === 'draft' && <div className="mt-4"><Button size="sm" variant="secondary" onClick={() => {setEditingTemplate(t);setDraft({name:t.name,channel:t.channel,body:t.body,dlt_template_id:t.dlt_template_id??''});setTemplateOpen(true)}}>Edit draft</Button></div>}</Card>)}
         {templatesLive?.length === 0 && <Card className="md:col-span-2 xl:col-span-3"><EmptyState title="No templates yet" body="Create a draft template to begin your organisation's template library."/></Card>}
       </div>
     </div>}
@@ -259,7 +262,7 @@ function LiveComms({ tenantId }: { tenantId: string }) {
       {key:'attempts',header:'Attempts',render:r=>r.attempts},
       {key:'permanent',header:'Failure',render:r=><Status value={r.is_permanent ? 'Permanent' : 'Retryable'}/>}
     ]}/></Card></div>}
-    <Modal open={templateOpen} onClose={() => setTemplateOpen(false)} title="Create draft template" footer={<><Button variant="secondary" onClick={() => setTemplateOpen(false)}>Cancel</Button><Button loading={saving} disabled={draft.name.trim().length < 2 || draft.body.trim().length < 5} onClick={() => void saveTemplate()}>Save draft</Button></>}>
+    <Modal open={templateOpen} onClose={() => setTemplateOpen(false)} title={editingTemplate ? "Edit draft template" : "Create draft template"} footer={<><Button variant="secondary" onClick={() => setTemplateOpen(false)}>Cancel</Button><Button loading={saving} disabled={draft.name.trim().length < 2 || draft.body.trim().length < 5} onClick={() => void saveTemplate()}>{editingTemplate ? "Save changes" : "Save draft"}</Button></>}>
       <div className="space-y-4">
         <Field label="Template name"><Input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></Field>
         <Field label="Channel"><Select value={draft.channel} onChange={e=>setDraft({...draft,channel:e.target.value as typeof draft.channel})}><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></Select></Field>
