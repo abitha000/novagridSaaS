@@ -20,3 +20,8 @@ A credit is consumed when a recipient is admitted in a non-skipped state. Changi
 
 ## Safety
 No migration was applied to live Supabase. Production remains NO-GO pending the full rollout gate.
+
+
+## Additional regression coverage
+
+The migration smoke suite now asserts the durable notification usage ledger invariant: once a recipient has been admitted, later status changes (including skipped/failed/retrying) cannot refund or duplicate its monthly credit. This is a database-level regression test, not a provider-delivery test.
