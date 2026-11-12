@@ -154,7 +154,7 @@ assert(invalidCategoryRejected,"Registration accepted an unknown industry catego
 
 const wrongPlan={...registrationArgs,p_registration_token:crypto.randomUUID(),p_plan_key:"not-a-real-plan"};
 let invalidPlanRejected=false;
-try { await rpc(ownerToken,"register_organisation",wrongPlan); } catch(error) { invalidPlanRejected=String(error).includes("unknown plan"); }
+try { await rpc(ownerToken,"register_organisation",wrongPlan); } catch(error) { invalidPlanRejected=String(error).includes("selected plan is unavailable"); }
 assert(invalidPlanRejected,"Registration accepted an unknown preferred plan");
 const retryId=await rpc(ownerToken,"register_organisation",registrationArgs);
 assert(retryId===orgId,"Registration RPC retry was not idempotent");
