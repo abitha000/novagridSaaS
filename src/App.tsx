@@ -63,6 +63,12 @@ function DemoBadge() {
 
 function Routes() {
   const { path, query } = useRoute()
+  const auth = useAuth()
+  useEffect(() => {
+    if (!auth.session || new URLSearchParams(window.location.search).get('auth_callback') !== 'signup') return
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`)
+    go('/register/complete')
+  }, [auth.session])
   const [introDone, setIntroDone] = useState(seen)
   const finish = useCallback(() => {
     try {
