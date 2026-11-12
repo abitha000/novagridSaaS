@@ -39,3 +39,12 @@ The ephemeral integration script additionally verifies:
 - Platform approval rejects an unsupported decision value.
 
 These checks run against disposable local Auth users and fixture records only.
+
+
+## Verified run on merged main — 2026-11-12
+
+Commit: `64ee0ddb612813f9f8b005f527d94d1185c14152`
+
+The Supabase local integration workflow completed successfully. Its log reported PASS for Auth sign-in, tenant RLS isolation, anonymous access, Storage own-tenant upload/list/signed-read/delete, cross-tenant Storage denial, reduced-limit quota rejection, unconfirmed-email denial, registration category/plan validation, platform approval authorization, registration idempotency, subscription trial assignment, staff RBAC and fixture cleanup.
+
+The full NOVAGRID CI, migration validation and isolated-preflight script validation workflows also passed on the same commit. This is a local ephemeral-stack result, not a hosted production Supabase rehearsal.
