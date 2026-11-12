@@ -34,6 +34,19 @@ create table public.edu_exam_results(
  foreign key(tenant_id,exam_subject_id) references public.edu_exam_subjects(tenant_id,id),
  foreign key(tenant_id,enrolment_id) references public.edu_enrolments(tenant_id,id)
 );
+create or replace function private.validate_edu_exam_result()
+returns trigger language plpgsql set search_path='' as $
+declare v_max numeric;v_class uuid;v_enrolment_class uuid;
+begin
+ select max_marks,class_id into v_max,v_class from public.edu_exam_subjects where tenant_id=new.tenant_id and id=new.exam_subject_id;
+ if not found then raise exception using errcode='23503',message='Examination subject does not exist for this tenant.';end if;
+ select class_id into v_enrolment_class from public.edu_enrolments where tenant_id=new.tenant_id and id=new.enrolment_id and status='active';
+ if not found or v_enrolment_class<>v_class then raise exception using errcode='23514',message='Result student must have an active enrolment in the subject class.';end if;
+ if new.marks>v_max then raise exception using errcode='23514',message='Marks cannot exceed the subject maximum.';end if;
+ return new;
+end $;
+revoke all on function private.validate_edu_exam_result() from public,anon,authenticated;
+create trigger edu_exam_result_validate before insert or update on public.edu_exam_results for each row execute function private.validate_edu_exam_result();
 create index edu_timetable_lookup on public.edu_timetable_entries(tenant_id,class_id,weekday,period_number);
 create index edu_exam_dates on public.edu_exams(tenant_id,starts_on desc);
 create index edu_exam_results_subject on public.edu_exam_results(tenant_id,exam_subject_id);
