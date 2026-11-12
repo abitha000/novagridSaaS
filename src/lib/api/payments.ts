@@ -19,6 +19,7 @@ export type PaymentRecord = {
 }
 export type PaymentInput = {
   contact_id: string
+  membership_id: string | null
   amount_paise: number
   method: PaymentRecord['method']
   paid_at: string
