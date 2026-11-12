@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"></head>
+<body style="margin:0;padding:32px 16px;background:#08090b;color:#f7f8f4;font-family:Inter,Arial,sans-serif">
+  <div style="max-width:560px;margin:0 auto">
+    <div style="padding:26px 28px;border:1px solid #292d30;border-radius:18px;background:#111316">
+      <div style="font-size:13px;font-weight:800;letter-spacing:2px;color:#cdf22b">NOVAGRID<span style="color:#f7f8f4">SAAS</span></div>
+      <div style="height:1px;background:#292d30;margin:24px 0"></div>
+      <div style="width:48px;height:48px;border-radius:14px;background:#cdf22b;color:#08090b;display:grid;place-items:center;font-size:24px;font-weight:800">✓</div>
+      <h1 style="font-size:26px;line-height:1.2;margin:24px 0 12px;color:#fff">Verify your email</h1>
+      <p style="font-size:15px;line-height:1.7;color:#c5c9c1;margin:0 0 24px">Welcome to NovaGridSaaS. Confirm your email address to activate your account and continue setting up your workspace.</p>
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 22px;border-radius:10px;background:#cdf22b;color:#08090b;text-decoration:none;font-weight:800;font-size:15px">Confirm email address</a>
+      <p style="font-size:13px;line-height:1.6;color:#92978e;margin:24px 0 0">If the button doesn't work, copy and paste this link into your browser:<br><a href="{{ .ConfirmationURL }}" style="color:#cdf22b;word-break:break-all">{{ .ConfirmationURL }}</a></p>
+      <div style="height:1px;background:#292d30;margin:26px 0 18px"></div>
+      <p style="font-size:12px;line-height:1.6;color:#777e74;margin:0">If you didn't create a NovaGridSaaS account, you can safely ignore this email.</p>
+      <p style="font-size:11px;color:#666d63;margin:18px 0 0">© NovaGridSaaS</p>
+    </div>
+  </div>
+</body></html>
