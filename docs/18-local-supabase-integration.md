@@ -28,3 +28,14 @@ The local integration workflow now creates files for two disposable tenants and 
 - Tenant B's object is checked after Tenant A's denied delete to prove it remains intact.
 
 These checks run only against the ephemeral Supabase stack created by GitHub Actions. They do not modify hosted projects. The test suite still does not replace a backup/restore rehearsal or a full production deployment review.
+
+
+## Expanded Auth and platform authorization negatives (PR #53)
+
+The ephemeral integration script additionally verifies:
+- An unconfirmed email cannot obtain a password-grant session.
+- Registration rejects unknown industry categories and unknown plan preferences.
+- A tenant owner cannot approve an organisation.
+- Platform approval rejects an unsupported decision value.
+
+These checks run against disposable local Auth users and fixture records only.
