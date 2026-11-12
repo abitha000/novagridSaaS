@@ -9,6 +9,7 @@ import type { Channel, Contact, StaffMember } from '../lib/api/types'
 import { createGymMembership, listGymMemberships, setGymMembershipStatus, type GymMembership } from '../lib/api/gym'
 import { listGymAttendance, saveGymAttendance, type GymAttendanceStatus } from '../lib/api/gym-attendance'
 import { createGymTrainer, listGymTrainers, setGymTrainerStatus, type GymTrainer } from '../lib/api/gym-trainers'
+import { createGymTrainingSession, listGymTrainingSessions, setGymTrainingSessionStatus, type GymTrainingSession } from '../lib/api/gym-training-sessions'
 
 const SchemaNote = ({ e }: { e: unknown }) =>
   e instanceof BackendError && e.kind === 'schema_missing' ? (
@@ -401,6 +402,82 @@ export function LiveGymTrainers({ tenantId }: { tenantId: string }) {
         <Field label="Trainer contact"><Select value={form.contact_id} onChange={e=>setForm({...form,contact_id:e.target.value})}><option value="">Choose a contact</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</Select></Field>
         <Field label="Speciality"><Input value={form.specialty} onChange={e=>setForm({...form,specialty:e.target.value})}/></Field>
         <Field label="Bio (optional)"><Input value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})}/></Field>
+      </div>
+    </Modal>
+  </>
+}
+
+
+/* ---------------- Gym personal-training sessions (live) ---------------- */
+export function LiveGymTrainingSessions({ tenantId }: { tenantId: string }) {
+  const toast = useToast()
+  const [sessions,setSessions] = useState<GymTrainingSession[]|null>(null)
+  const [trainers,setTrainers] = useState<GymTrainer[]>([])
+  const [members,setMembers] = useState<Contact[]>([])
+  const [date,setDate] = useState(new Date().toISOString().slice(0,10))
+  const [error,setError] = useState<unknown>(null)
+  const [open,setOpen] = useState(false)
+  const [busy,setBusy] = useState(false)
+  const [form,setForm] = useState({trainer_id:'',member_contact_id:'',start:'09:00',duration:'60',session_type:'Personal training',notes:''})
+  const load=useCallback(async()=>{
+    setError(null)
+    try {
+      const from=new Date(date+'T00:00:00').toISOString()
+      const to=new Date(new Date(date+'T00:00:00').getTime()+86400000).toISOString()
+      const [s,t,people]=await Promise.all([listGymTrainingSessions(tenantId,from,to),listGymTrainers(tenantId),listAllContacts(tenantId)])
+      setSessions(s);setTrainers(t.filter(x=>x.status==='active'));setMembers(people.filter(x=>x.type==='member'||x.type==='person'))
+    } catch(e){setError(e);setSessions([])}
+  },[tenantId,date])
+  useEffect(()=>{void load()},[load])
+  const trainerName=(id:string)=>trainers.find(t=>t.id===id)?.contact?.full_name??'Trainer'
+  const memberName=(id:string)=>members.find(m=>m.id===id)?.full_name??'Member'
+  const counts={scheduled:(sessions??[]).filter(s=>s.status==='scheduled').length,completed:(sessions??[]).filter(s=>s.status==='completed').length,cancelled:(sessions??[]).filter(s=>s.status==='cancelled'||s.status==='no_show').length}
+  const create=async()=>{
+    const start=new Date(date+'T'+form.start+':00')
+    const end=new Date(start.getTime()+Number(form.duration)*60000)
+    setBusy(true)
+    try{
+      await createGymTrainingSession(tenantId,{trainer_id:form.trainer_id,member_contact_id:form.member_contact_id,starts_at:start.toISOString(),ends_at:end.toISOString(),session_type:form.session_type,notes:form.notes})
+      toast('Training session scheduled');setOpen(false);await load()
+    }catch(e){toast(errorMessage(e),'err')}finally{setBusy(false)}
+  }
+  const update=async(id:string,status:GymTrainingSession['status'])=>{
+    try{await setGymTrainingSessionStatus(id,status);toast('Session updated');await load()}
+    catch(e){toast(errorMessage(e),'err')}
+  }
+  const time=(s:string)=>new Date(s).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})
+  return <>
+    <PageHeader title="Training sessions" sub="Schedule and manage personal-training sessions." actions={<Button icon={<I.CalendarPlus size={16}/>} onClick={()=>setOpen(true)}>Schedule session</Button>}/>
+    <div className="flex items-end gap-3 mb-4"><Field label="Session date"><Input type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field><Button variant="secondary" onClick={()=>void load()}>Refresh</Button></div>
+    <SchemaNote e={error}/>
+    <div className="grid sm:grid-cols-3 gap-4 mb-4">
+      <Stat label="Scheduled" value={String(counts.scheduled)} icon={<I.CalendarClock size={18}/>}/>
+      <Stat label="Completed" value={String(counts.completed)} icon={<I.CheckCircle2 size={18}/>}/>
+      <Stat label="Cancelled / no-show" value={String(counts.cancelled)} icon={<I.CalendarX size={18}/>}/>
+    </div>
+    <Card>
+      {error && !(error instanceof BackendError&&error.kind==='schema_missing')?<ErrorState onRetry={()=>void load()} body={errorMessage(error)}/>:
+      <DataTable loading={sessions===null} rows={sessions??[]} empty={<EmptyState title="No sessions scheduled" body="Schedule a personal-training session for this date." action={<Button onClick={()=>setOpen(true)}>Schedule session</Button>}/>} cols={[
+        {key:'time',header:'Time',mobile:'title',render:s=><div className="font-medium">{time(s.starts_at)} – {time(s.ends_at)}</div>},
+        {key:'trainer',header:'Trainer',render:s=><span>{trainerName(s.trainer_id)}</span>},
+        {key:'member',header:'Member',render:s=><span>{memberName(s.member_contact_id)}</span>},
+        {key:'type',header:'Session',render:s=><span>{s.session_type}</span>},
+        {key:'status',header:'Status',render:s=><Status value={s.status}/>},
+        {key:'actions',header:'',mobile:'hide',render:s=>s.status==='scheduled'?<Dropdown label="Session actions" trigger={<span className="size-8 grid place-items-center rounded-lg hover:bg-ng-tint"><I.MoreHorizontal size={18}/></span>} items={[
+          {label:'Mark completed',icon:<I.Check size={16}/>,onClick:()=>void update(s.id,'completed')},
+          {label:'Mark no-show',icon:<I.UserX size={16}/>,onClick:()=>void update(s.id,'no_show')},
+          {label:'Cancel session',icon:<I.Ban size={16}/>,danger:true,onClick:()=>void update(s.id,'cancelled')}
+        ]}/>:null}
+      ]}/>}
+    </Card>
+    <Modal open={open} onClose={()=>setOpen(false)} title="Schedule training session" footer={<><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button loading={busy} disabled={!form.trainer_id||!form.member_contact_id||!form.start||!['30','45','60','90'].includes(form.duration)} onClick={()=>void create()}>Schedule session</Button></>}>
+      <div className="space-y-4">
+        <Field label="Trainer"><Select value={form.trainer_id} onChange={e=>setForm({...form,trainer_id:e.target.value})}><option value="">Choose trainer</option>{trainers.map(t=><option key={t.id} value={t.id}>{t.contact?.full_name??'Trainer'} · {t.specialty}</option>)}</Select></Field>
+        <Field label="Member"><Select value={form.member_contact_id} onChange={e=>setForm({...form,member_contact_id:e.target.value})}><option value="">Choose member</option>{members.map(m=><option key={m.id} value={m.id}>{m.full_name}</option>)}</Select></Field>
+        <Field label="Start time"><Input type="time" value={form.start} onChange={e=>setForm({...form,start:e.target.value})}/></Field>
+        <Field label="Duration"><Select value={form.duration} onChange={e=>setForm({...form,duration:e.target.value})}><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option><option value="90">90 minutes</option></Select></Field>
+        <Field label="Session type"><Input value={form.session_type} onChange={e=>setForm({...form,session_type:e.target.value})}/></Field>
+        <Field label="Notes"><Input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
       </div>
     </Modal>
   </>
