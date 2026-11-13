@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${(import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/+$/, '')}`/?auth_callback=signup`, data: { full_name: reg.input.ownerName, pending_registration: reg } },
+          options: { emailRedirectTo: `${(import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/+$/, '')}/?auth_callback=signup`, data: { full_name: reg.input.ownerName, pending_registration: reg } },
         })
         if (error) throw new Error(error.message)
         return { needsEmailConfirmation: !data.session }
