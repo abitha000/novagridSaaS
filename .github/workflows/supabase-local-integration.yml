@@ -38,6 +38,8 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Verify Auth, PostgREST tenant isolation and Storage API
         run: node scripts/supabase-local-integration.mjs
+      - name: Verify real signup email, PKCE callback and organisation registration
+        run: node scripts/supabase-email-signup-integration.mjs
       - name: Capture local Storage diagnostics on failure
         if: failure()
         shell: bash
