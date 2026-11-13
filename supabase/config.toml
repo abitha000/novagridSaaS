@@ -49,6 +49,10 @@ jwt_expiry = 3600
 enable_signup = true
 enable_anonymous_sign_ins = false
 
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+
 [edge_runtime]
 enabled = false
 
