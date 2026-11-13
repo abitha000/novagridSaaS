@@ -6,8 +6,8 @@ const email="signup-e2e-owner@novagrid.test",password=randomBytes(24).toString("
 const callback="http://localhost:3000/?auth_callback=signup",verifier=randomBytes(32).toString("base64url");
 const challenge=createHash("sha256").update(verifier).digest("base64url");
 const pending={token:crypto.randomUUID(),input:{name:"Email Flow Gym",ownerName:"Email Flow Owner",phone:"+919876543210",address:"Test",country:"India",state:"Tamil Nadu",city:"Hosur",categoryKey:"gym",orgType:"fitness",planKey:"trial"}};
-const q=new URLSearchParams({redirect_to:callback,code_challenge:challenge,code_challenge_method:"s256"});
-const signup=await fetch(base+"/auth/v1/signup?"+q,{method:"POST",headers:{apikey:anon,"Content-Type":"application/json"},body:JSON.stringify({email,password,data:{full_name:pending.input.ownerName,pending_registration:pending}})});
+const q=new URLSearchParams({redirect_to:callback});
+const signup=await fetch(base+"/auth/v1/signup?"+q,{method:"POST",headers:{apikey:anon,"Content-Type":"application/json"},body:JSON.stringify({email,password,data:{full_name:pending.input.ownerName,pending_registration:pending},code_challenge:challenge,code_challenge_method:"s256"})});
 const sd=await signup.json();assert(signup.ok,"Signup failed: "+JSON.stringify(sd).slice(0,250));assert(!sd.access_token,"Confirmation was not required");
 let msg;for(let n=0;n<40&&!msg;n++){const r=await fetch(mailpit+"/api/v1/messages?start=0&limit=50");assert(r.ok,"Local email inbox unavailable");const d=await r.json();msg=(d.messages||[]).find(m=>(m.To||[]).some(t=>(t.Address||"").toLowerCase()===email));if(!msg)await new Promise(x=>setTimeout(x,500))}
 assert(msg,"Confirmation email not delivered");const mr=await fetch(mailpit+"/api/v1/message/"+encodeURIComponent(msg.ID));assert(mr.ok,"Email message could not be read");const m=await mr.json();
