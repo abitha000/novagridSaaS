@@ -22,7 +22,7 @@ jobs:
         with:
           version: latest
       - name: Start isolated Supabase stack
-        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,inbucket
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor
       - name: Apply NOVAGRID migrations to disposable local Supabase
         run: supabase db reset --local
       - name: Export local Supabase credentials
@@ -34,6 +34,7 @@ jobs:
             echo "SUPABASE_ANON_KEY=$ANON_KEY"
             echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
             echo "SUPABASE_DB_URL=$DB_URL"
+            echo "MAILPIT_URL=http://127.0.0.1:54324"
           } >> "$GITHUB_ENV"
       - name: Verify Auth, PostgREST tenant isolation and Storage API
         run: node scripts/supabase-local-integration.mjs
